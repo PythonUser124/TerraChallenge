@@ -18,9 +18,21 @@
     terrain: Cesium.Terrain.fromWorldTerrain()
   });
 
+  // Replace the default black globe with a public basemap so Earth is visible without an Ion token.
+  const baseLayer = new Cesium.ArcGisMapServerImageryProvider({
+    url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer'
+  });
+  viewer.imageryLayers.removeAll();
+  viewer.imageryLayers.addImageryProvider(baseLayer);
+
   // Focus camera on California
   viewer.camera.flyTo({
-    destination: Cesium.Rectangle.fromDegrees(-125, 32, -113, 43),
+    destination: Cesium.Cartesian3.fromDegrees(-119.5, 37.2, 1200000),
+    orientation: {
+      heading: Cesium.Math.toRadians(350),
+      pitch: Cesium.Math.toRadians(-35),
+      roll: 0.0
+    },
     duration: 1.5
   });
 
@@ -39,7 +51,7 @@
   }
 
   // --- GIBS WMTS: Terra Corrected Reflectance (daily) ---
-  // Use GetCapabilities to confirm tileMatrixSetID and layer name in your chosen projection. 
+  // Use GetCapabilities to confirm tileMatrixSetID and layer name in your chosen projection.
   // Example uses EPSG:3857 "best" endpoint.
   const gibsWMTS = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/wmts.cgi';
   const times = Cesium.TimeIntervalCollection.fromIso8601({
@@ -64,7 +76,7 @@
     layer: 'MODIS_Terra_NDVI_16Day', // confirm exact id (e.g., MODIS_Terra_NDVI_16Day) via capabilities
     style: 'default',
     format: 'image/png',
-    tileMatrixSetID: 'GoogleMapsCompatible', 
+    tileMatrixSetID: 'GoogleMapsCompatible',
     clock: viewer.clock,
     times: times
   });
