@@ -57,6 +57,7 @@
     <button id="recScripted" title="Scripted recording: advance date, wait for tiles, hold, repeat">🎬 Rec SCRIPTED (preload/step, 24 fps)</button>
     <button id="convertMp4" disabled title="Convert last WebM recording to MP4">➡️ Convert to MP4</button>
     <span id="loading" class="muted"></span>
+    <span id="recStatus" class="muted"></span>
     <span id="conv" class="muted"></span>
   </div>
 
@@ -335,6 +336,7 @@
     let lastRecordingType = '';
     let recTimer = null;
     let recStartMs = 0;
+    let activeStream = null;
 
     const recBadge = document.getElementById('recBadge');
     const recMode  = document.getElementById('recMode');
@@ -364,38 +366,30 @@
       return 'video/webm;codecs=vp8';
     }
 
-    function startRecording(fps = 24, modeLabel = 'LIVE') {
-      const canvas = viewer.scene.canvas;
-      const stream = canvas.captureStream(fps);
-      const mimeType = pickRecorderMime();
+    const recStatus = document.getElementById('recStatus');
+    const canvas = viewer.scene.canvas;
+    async function getRecordingStream(fps = 24) {
+      const capture = canvas.captureStream || canvas.mozCaptureStream;
+      if (capture) {
+        const stream = capture.call(canvas, fps);
+        if (stream && stream.getVideoTracks().length) return stream;
+      }
+      if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+        return navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: fps, displaySurface: 'browser' },
+          audio: false
+        });
+      }
 
-      recordedChunks = [];
-      mediaRecorder = new MediaRecorder(stream, { mimeType });
-      mediaRecorder.ondataavailable = (e) => { if (e.data.size) recordedChunks.push(e.data); };
-      mediaRecorder.onstop = () => {
-        lastRecordingBlob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'video/webm' });
-        lastRecordingType = lastRecordingBlob.type || '';
-        const directMp4 = /mp4/i.test(lastRecordingType);
-
-        // Auto-download native recording
-        const url = URL.createObjectURL(lastRecordingBlob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `cesium-${directMp4 ? 'recording' : 'webm'}-${new Date().toISOString().replace(/[:.]/g,'-')}.${directMp4 ? 'mp4' : 'webm'}`;
-        a.click();
-        URL.revokeObjectURL(url);
-
-        document.getElementById('convertMp4').disabled = directMp4;
-        convNote.textContent = directMp4 ? 'Recorded directly to MP4 (no conversion needed).' : 'Ready to convert WebM → MP4.';
-        setRecUI(false);
-      };
-      mediaRecorder.start(100);
+      
 
       // Buttons
-      document.getElementById('recStart').disabled = true;
-      document.getElementById('recStop').disabled  = false;
-      document.getElementById('convertMp4').disabled = true;
-      convNote.textContent = '';
+      if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+        return navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: fps, displaySurface: 'browser' },
+          audio: false
+        });
+      }
 
       setRecUI(true, modeLabel);
     }
