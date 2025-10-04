@@ -1,0 +1,9 @@
+{
+  "name": "terrachallenge",
+  "version": "1.0.0",
+  "description": "Terra Challenge Cesium viewer",
+  "type": "module",
+  "scripts": {
+    "test": "node tests/smoke.test.js"
+  }
+}

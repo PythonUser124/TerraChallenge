@@ -15,12 +15,25 @@
     timeline: true,
     animation: true,
     baseLayerPicker: false,
-    terrain: Cesium.Terrain.fromWorldTerrain()
+    terrainProvider: new Cesium.EllipsoidTerrainProvider()
   });
+
+  const baseLayer = new Cesium.ArcGisMapServerImageryProvider({
+    url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer'
+  });
+
+  // Ensure the viewer uses the ArcGIS imagery as the background.
+  viewer.imageryLayers.removeAll();
+  viewer.imageryLayers.addImageryProvider(baseLayer);
 
   // Focus camera on California
   viewer.camera.flyTo({
-    destination: Cesium.Rectangle.fromDegrees(-125, 32, -113, 43),
+    destination: Cesium.Cartesian3.fromDegrees(-119.5, 37.2, 1200000),
+    orientation: {
+      heading: Cesium.Math.toRadians(350),
+      pitch: Cesium.Math.toRadians(-35),
+      roll: 0.0
+    },
     duration: 1.5
   });
 
@@ -32,69 +45,6 @@
   viewer.clock.currentTime = start.clone();
   viewer.clock.clockRange = Cesium.ClockRange.CLAMPED;
   viewer.clock.multiplier = 500000; // speed up animation
-
-  // Helper: build ISO date (YYYY-MM-DD) for each tick (monthly cadence here)
-  function isoDateFromJulian(jd) {
-    return Cesium.JulianDate.toIso8601(jd).slice(0,10);
-  }
-
-  // --- GIBS WMTS: Terra Corrected Reflectance (daily) ---
-  // Use GetCapabilities to confirm tileMatrixSetID and layer name in your chosen projection. 
-  // Example uses EPSG:3857 "best" endpoint.
-  const gibsWMTS = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/wmts.cgi';
-  const times = Cesium.TimeIntervalCollection.fromIso8601({
-    iso8601: '2000-01-01/2025-10-01/P1M',
-    dataCallback: (interval) => ({ time: Cesium.JulianDate.toIso8601(interval.start).slice(0,10) })
-  });
-
-  const terraTrueColor = new Cesium.WebMapTileServiceImageryProvider({
-    url: gibsWMTS,
-    layer: 'MODIS_Terra_CorrectedReflectance_TrueColor', // check exact id in WMTSCapabilities
-    style: 'default',
-    format: 'image/jpeg',
-    tileMatrixSetID: 'GoogleMapsCompatible', // or '2km','1km','500m' depending on layer
-    clock: viewer.clock,
-    times: times
-  });
-  viewer.imageryLayers.addImageryProvider(terraTrueColor);
-
-  // --- GIBS WMTS: Terra NDVI (16-day)   (semi-transparent overlay) ---
-  const terraNDVI = new Cesium.WebMapTileServiceImageryProvider({
-    url: gibsWMTS,
-    layer: 'MODIS_Terra_NDVI_16Day', // confirm exact id (e.g., MODIS_Terra_NDVI_16Day) via capabilities
-    style: 'default',
-    format: 'image/png',
-    tileMatrixSetID: 'GoogleMapsCompatible', 
-    clock: viewer.clock,
-    times: times
-  });
-  const ndviLayer = viewer.imageryLayers.addImageryProvider(terraNDVI);
-  ndviLayer.alpha = 0.45; // blend NDVI over true color
-
-  // --- FIRMS WMS (MODIS Fire/Hotspots) with TIME parameter ---
-  // WMS endpoint supports TIME or TIME-RANGE (up to 31 days). We'll step daily to match currentTime.
-  const firmsWms = new Cesium.WebMapServiceImageryProvider({
-    url: 'https://firms.modaps.eosdis.nasa.gov/mapserver/wms',
-    layers: 'Fires_All_MODIS', // e.g., MODIS active fire product; see FIRMS WMS docs for layer names
-    parameters: {
-      transparent: 'true',
-      format: 'image/png',
-      styles: '',
-      // initialize; Cesium will update via .times + clock below
-      TIME: '2000-01-01'
-    },
-    clock: viewer.clock,
-    // Time intervals to pass TIME=YYYY-MM-DD to FIRMS (P1M for monthly snapshots; use P1D for daily)
-    times: Cesium.TimeIntervalCollection.fromIso8601({
-      iso8601: '2000-01-01/2025-10-01/P1M',
-      dataCallback: (interval) => ({ TIME: Cesium.JulianDate.toIso8601(interval.start).slice(0,10) })
-    })
-  });
-  const fireLayer = viewer.imageryLayers.addImageryProvider(firmsWms);
-  fireLayer.alpha = 0.8;
-
-  // Optional: MOPITT CO (monthly) via Worldview/GIBS as WMTS layer (check layer id in capabilities)
-  // const mopittCO = new Cesium.WebMapTileServiceImageryProvider({...});
 
 })();
 </script>
