@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Cesium Animations Showcase</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- If you host Cesium locally, point these to ./Build/Cesium/ -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.120/Build/Cesium/Widgets/widgets.css">
+  <style>
+    html, body, #cesiumContainer { width:100%; height:100%; margin:0; padding:0; overflow:hidden; background:#0b1120; }
+    .toolbar {
+      position:absolute; top:10px; left:10px; z-index:5;
+      display:flex; flex-wrap:wrap; gap:8px; padding:10px 12px;
+      background:rgba(0,0,0,0.55); border-radius:12px; color:#fff; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial;
+      box-shadow:0 10px 30px rgba(0,0,0,0.4);
+    }
+    .toolbar button, .toolbar select, .toolbar input[type="range"] {
+      background:#111827; color:#e5e7eb; border:1px solid #374151;
+      padding:6px 10px; border-radius:8px; cursor:pointer; font-weight:600;
+    }
+    .toolbar button:hover { background:#1f2937; }
+    .toolbar label { font-size:12px; opacity:.8; margin-right:6px }
+    .row { display:flex; gap:8px; align-items:center; }
+    .grow { flex:1 1 auto; min-width:120px }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+
+  <div class="toolbar">
+    <div class="row">
+      <button id="btnPlayPause">⏯︎ Play</button>
+      <button id="btnResetClock">⟲ Reset</button>
+      <label>Speed</label>
+      <select id="speedSelect">
+        <option value="1">1×</option>
+        <option value="10">10×</option>
+        <option value="60">60×</option>
+        <option value="600">600×</option>
+      </select>
+    </div>
+    <div class="row">
+      <button id="btnTour">🎥 Camera Tour</button>
+      <button id="btnFlyHome">🏠 Home</button>
+      <button id="btnFocusEntity">🛰 Focus Entity</button>
+      <button id="btnModelAnim">🤖 Play Model Anim</button>
+    </div>
+    <div class="row">
+      <button id="btnToggleTrail">〰️ Toggle Trail</button>
+      <button id="btnToggleSmoke">💨 Toggle Smoke</button>
+      <button id="btnTogglePulse">💓 Toggle Pulse</button>
+      <button id="btnToggleFlowLine">➡️ Toggle Flow Line</button>
+    </div>
+    <div class="row grow">
+      <label>Imagery (time-lapse)</label>
+      <input id="imagerySlider" type="range" min="0" max="3" step="1" value="0" class="grow" />
+      <span id="imageryLabel">T0</span>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/cesium@1.120/Build/Cesium/Cesium.js"></script>
+  <script>
+    // =========================
+    // 1) Viewer + Clock setup
+    // =========================
+    Cesium.Ion.defaultAccessToken = "YOUR_ION_TOKEN_HERE";
+
+    const viewer = new Cesium.Viewer("cesiumContainer", {
+      animation: true,
+      timeline: true,
+      baseLayerPicker: true,
+      geocoder: false,
+      sceneModePicker: true,
+      terrain: Cesium.Terrain.fromWorldTerrain(),
+      // If you see lighting artifacts in some GPUs, you can disable:
+      // shadows: false,
+    });
+
+    // Nice lighting
+    viewer.scene.globe.enableLighting = true;
+
+    // Clock range (2 hours of simulated time)
+    const start = Cesium.JulianDate.now();
+    const stop = Cesium.JulianDate.addHours(start, 2, new Cesium.JulianDate());
+
+    viewer.clock.startTime = start.clone();
+    viewer.clock.stopTime = stop.clone();
+    viewer.clock.currentTime = start.clone();
+    viewer.clock.clockRange = Cesium.ClockRange.CLAMPED;
+    viewer.clock.multiplier = 60; // 60× by default
+    viewer.timeline.zoomTo(start, stop);
+
+    // =========================
+    // 2) A time-dynamic moving entity (plane/drone)
+    // =========================
+    function makeMovingEntity() {
+      const property = new Cesium.SampledPositionProperty();
+      // Path along a few lat/lon points with timestamps
+      const pts = [
+        { lon: -122.4194, lat: 37.7749, h: 3000, tMin: 0   },  // San Francisco
+        { lon: -121.8863, lat: 37.3382, h: 3500, tMin: 20  },  // San Jose
+        { lon: -121.4944, lat: 38.5816, h: 4500, tMin: 40  },  // Sacramento
+        { lon: -120.7401, lat: 37.6391, h: 4000, tMin: 60  },  // Modesto
+        { lon: -121.2908, lat: 38.1041, h: 5000, tMin: 80  },  // Vacaville-ish
+      ];
+      for (const p of pts) {
+        const time = Cesium.JulianDate.addMinutes(start, p.tMin, new Cesium.JulianDate());
+        const pos = Cesium.Cartesian3.fromDegrees(p.lon, p.lat, p.h);
+        property.addSample(time, pos);
+      }
+      // Smooth interpolation
+      property.setInterpolationOptions({
+        interpolationAlgorithm: Cesium.HermitePolynomialApproximation,
+        interpolationDegree: 3,
+      });
+
+      const entity = viewer.entities.add({
+        id: "moving-entity",
+        availability: new Cesium.TimeIntervalCollection([new Cesium.TimeInterval({ start, stop })]),
+        position: property,
+        orientation: new Cesium.VelocityOrientationProperty(property),
+        model: {
+          uri: Cesium.IonResource.fromAssetId(75343), // Small drone model (or switch to your own glTF)
+          minimumPixelSize: 64,
+          maximumScale: 4
+        },
+        path: {
+          resolution: 1,
+          leadTime: 30,
+          trailTime: 120,
+          material: new Cesium.PolylineGlowMaterialProperty({ glowPower: 0.15 }),
+          width: 4
+        },
+        label: {
+          text: "Time-dynamic entity",
+          font: "14px sans-serif",
+          fillColor: Cesium.Color.CYAN,
+          showBackground: true,
+          pixelOffset: new Cesium.Cartesian2(0, -32)
+        }
+      });
+
+      return entity;
+    }
+    const movingEntity = makeMovingEntity();
+
+    // =========================
+    // 3) glTF model + built-in animations
+    // =========================
+    const modelEntity = viewer.entities.add({
+      id: "wind-turbine",
+      position: Cesium.Cartesian3.fromDegrees(-3.1791, 55.9445, 0), // random scenic spot
+      model: {
+        uri: Cesium.IonResource.fromAssetId(2123095), // Example animated model (replace with your asset)
+        scale: 2,
+        minimumPixelSize: 64
+      }
+    });
+
+    // Playback helper for model animations
+    async function playModelAnimations() {
+      // Ensure model is loaded
+      const prim = await viewer.scene.primitives.add(Cesium.Model.fromGltf({
+        url: Cesium.IonResource.fromAssetId(2123095),
+        modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(
+          Cesium.Cartesian3.fromDegrees(-3.1791, 55.9445, 0)
+        ),
+        scale: 2
+      }));
+      prim.readyPromise.then(() => {
+        try {
+          prim.activeAnimations.addAll({
+            loop: Cesium.ModelAnimationLoop.REPEAT,
+            multiplier: 1.0
+          });
+        } catch (e) {
+          console.warn("No animations found on model:", e);
+        }
+      });
+    }
+
+    // =========================
+    // 4) Animated polylines
+    // =========================
+    // (a) dashed line that “moves” by shifting dash pattern via material time uniform
+    const dashedLine = viewer.entities.add({
+      id: "dashed-line",
+      polyline: {
+        positions: Cesium.Cartesian3.fromDegreesArray([
+          -74.0060, 40.7128,   // NYC
+          -118.2437, 34.0522   // LA
+        ]),
+        width: 5,
+        material: new Cesium.PolylineDashMaterialProperty({
+          color: Cesium.Color.YELLOW,
+          gapColor: Cesium.Color.TRANSPARENT,
+          dashLength: 32,
+          dashPattern: 0b1111000011110000
+        })
+      }
+    });
+
+    // (b) flowing texture line using a custom material with time uniform
+    const flowMaterial = new Cesium.Material({
+      fabric: {
+        type: 'PolylineTrail',
+        uniforms: {
+          image: Cesium.buildModuleUrl('Assets/Textures/Trail.png'),
+          time: 0.0,
+          speed: 1.0,
+          repeat: 1.0
+        },
+        source: `
+          czm_material czm_getMaterial(czm_materialInput input)
+          {
+            czm_material material = czm_getDefaultMaterial(input);
+            float t = fract(czm_frameNumber / 60.0 * speed);
+            vec2 st = vec2(fract(input.st.s * repeat - t), input.st.t);
+            vec4 colorImage = texture(image, st);
+            material.alpha = colorImage.a;
+            material.diffuse = colorImage.rgb;
+            return material;
+          }`
+      }
+    });
+
+    const flowingLine = viewer.entities.add({
+      id: "flow-line",
+      polyline: {
+        positions: Cesium.Cartesian3.fromDegreesArray([
+          139.6917, 35.6895,   // Tokyo
+          151.2093,  -33.8688  // Sydney
+        ]),
+        width: 8,
+        material: flowMaterial,
+        show: false
+      }
+    });
+
+    // Keep flow moving
+    viewer.clock.onTick.addEventListener(() => {
+      // Nothing needed here since czm_frameNumber drives it, but you could adapt speed dynamically
+    });
+
+    // =========================
+    // 5) Pulsing extruded polygon
+    // =========================
+    const center = Cesium.Cartesian3.fromDegrees(12.4964, 41.9028); // Rome
+    let pulseOn = true;
+    const pulsingEntity = viewer.entities.add({
+      id: "pulsing-polygon",
+      position: center,
+      polygon: {
+        hierarchy: Cesium.Cartesian3.fromDegreesArray([
+          12.4864, 41.9028,
+          12.5064, 41.9028,
+          12.5064, 41.9128,
+          12.4864, 41.9128
+        ]),
+        material: new Cesium.ColorMaterialProperty(
+          new Cesium.CallbackProperty(() => {
+            const s = Math.abs(Math.sin(Cesium.JulianDate.secondsDifference(viewer.clock.currentTime, start))) * 0.6 + 0.3;
+            return Cesium.Color.RED.withAlpha(s);
+          }, false)
+        ),
+        extrudedHeight: new Cesium.CallbackProperty(() => {
+          if (!pulseOn) return 0.0;
+          const amp = 100.0;
+          const w = 2.0;
+          const dt = Cesium.JulianDate.secondsDifference(viewer.clock.currentTime, start);
+          return 50.0 + Math.abs(Math.sin(dt * w)) * amp;
+        }, false)
+      }
+    });
+
+    // =========================
+    // 6) Simple particle system (e.g., smoke)
+    // =========================
+    const volcanoPos = Cesium.Cartesian3.fromDegrees(-155.273, 19.406); // Hawaii
+    let smokeSystem = null;
+    function addSmoke() {
+      if (smokeSystem) return;
+      smokeSystem = viewer.scene.primitives.add(new Cesium.ParticleSystem({
+        image: Cesium.buildModuleUrl("Assets/Textures/smoke.png"),
+        startColor: Cesium.Color.WHITE.withAlpha(0.6),
+        endColor: Cesium.Color.GRAY.withAlpha(0.1),
+        startScale: 1.0,
+        endScale: 5.0,
+        minimumParticleLife: 2.0,
+        maximumParticleLife: 5.0,
+        minimumSpeed: 1.0,
+        maximumSpeed: 3.0,
+        emissionRate: 15,
+        imageSize: new Cesium.Cartesian2(20.0, 20.0),
+        emitter: new Cesium.ConeEmitter(Cesium.Math.toRadians(20.0)),
+        modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(volcanoPos),
+        lifetime: Number.POSITIVE_INFINITY
+      }));
+      viewer.entities.add({
+        position: volcanoPos,
+        label: { text: "Smoke", font: "14px sans-serif", fillColor: Cesium.Color.WHITE }
+      });
+    }
+    function removeSmoke() {
+      if (!smokeSystem) return;
+      viewer.scene.primitives.remove(smokeSystem);
+      smokeSystem = null;
+    }
+
+    // =========================
+    // 7) Imagery “time-lapse” rotator (swap layers)
+    // =========================
+    // In a real app, wire a WMTS/WMS TimeDynamicImagery. Here’s a simple stack that you can swap.
+    const imageryOptions = [
+      { label: "T0", provider: Cesium.IonImageryProvider.fromAssetId(2) },   // Bing Aerial (example)
+      { label: "T1", provider: Cesium.IonImageryProvider.fromAssetId(3) },   // Bing Aerial with Labels
+      { label: "T2", provider: Cesium.IonImageryProvider.fromAssetId(4) },   // Bing Roads
+      { label: "T3", provider: Cesium.IonImageryProvider.fromAssetId(3954) } // Natural Earth II (example)
+    ];
+    const imageryLayers = viewer.imageryLayers;
+    let imageryLayerRefs = [];
+
+    (async function loadImageryStack() {
+      for (let i = 0; i < imageryOptions.length; i++) {
+        const p = await imageryOptions[i].provider;
+        const layer = imageryLayers.addImageryProvider(p);
+        layer.alpha = (i === 0) ? 1.0 : 0.0;
+        imageryLayerRefs.push(layer);
+      }
+    })();
+
+    function setImageryIndex(i) {
+      imageryLayerRefs.forEach((lyr, idx) => lyr.alpha = (idx === i ? 1.0 : 0.0));
+      document.getElementById("imageryLabel").innerText = imageryOptions[i].label;
+    }
+
+    // =========================
+    // 8) Camera tour along a spline
+    // =========================
+    let tourRunning = false;
+    async function runCameraTour() {
+      if (tourRunning) return;
+      tourRunning = true;
+
+      const cams = [
+        { lon: -74.0060, lat: 40.7128, h: 12000, hdg: 20, pit: -25, r: 0 },
+        { lon: -87.6298, lat: 41.8781, h: 15000, hdg: 45, pit: -30, r: 0 },
+        { lon: -95.3698, lat: 29.7604, h: 17000, hdg: 90, pit: -35, r: 0 },
+        { lon: -118.2437, lat: 34.0522, h: 20000, hdg: 120, pit: -30, r: 0 },
+      ];
+
+      for (const c of cams) {
+        await viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(c.lon, c.lat, c.h),
+          orientation: {
+            heading: Cesium.Math.toRadians(c.hdg),
+            pitch: Cesium.Math.toRadians(c.pit),
+            roll: Cesium.Math.toRadians(c.r)
+          },
+          duration: 2.8,
+          maximumHeight: c.h * 1.3
+        });
+      }
+      tourRunning = false;
+    }
+
+    // =========================
+    // 9) Buttons / UI wiring
+    // =========================
+    const btnPlayPause = document.getElementById("btnPlayPause");
+    const btnResetClock = document.getElementById("btnResetClock");
+    const speedSelect  = document.getElementById("speedSelect");
+    const btnTour      = document.getElementById("btnTour");
+    const btnFlyHome   = document.getElementById("btnFlyHome");
+    const btnFocus     = document.getElementById("btnFocusEntity");
+    const btnModelAnim = document.getElementById("btnModelAnim");
+    const btnTrail     = document.getElementById("btnToggleTrail");
+    const btnSmoke     = document.getElementById("btnToggleSmoke");
+    const btnPulse     = document.getElementById("btnTogglePulse");
+    const btnFlowLine  = document.getElementById("btnToggleFlowLine");
+    const imagerySlider= document.getElementById("imagerySlider");
+
+    btnPlayPause.addEventListener("click", () => {
+      viewer.clock.shouldAnimate = !viewer.clock.shouldAnimate;
+      btnPlayPause.textContent = viewer.clock.shouldAnimate ? "⏸︎ Pause" : "⏯︎ Play";
+    });
+
+    btnResetClock.addEventListener("click", () => {
+      viewer.clock.currentTime = start.clone();
+    });
+
+    speedSelect.addEventListener("change", () => {
+      const v = Number(speedSelect.value);
+      viewer.clock.multiplier = v;
+    });
+
+    btnTour.addEventListener("click", runCameraTour);
+
+    btnFlyHome.addEventListener("click", () => {
+      viewer.camera.flyHome(2.0);
+    });
+
+    btnFocus.addEventListener("click", () => {
+      viewer.trackedEntity = movingEntity;
+    });
+
+    btnModelAnim.addEventListener("click", playModelAnimations);
+
+    let trailVisible = true;
+    btnTrail.addEventListener("click", () => {
+      trailVisible = !trailVisible;
+      movingEntity.path.show = trailVisible;
+    });
+
+    let smokeVisible = false;
+    btnSmoke.addEventListener("click", () => {
+      smokeVisible = !smokeVisible;
+      if (smokeVisible) addSmoke(); else removeSmoke();
+    });
+
+    let pulseVisible = true;
+    btnPulse.addEventListener("click", () => {
+      pulseVisible = !pulseVisible;
+      pulsingEntity.show = pulseVisible;
+    });
+
+    let flowVisible = false;
+    btnFlowLine.addEventListener("click", () => {
+      flowVisible = !flowVisible;
+      flowingLine.show = flowVisible;
+    });
+
+    imagerySlider.addEventListener("input", (e) => {
+      const idx = Number(e.target.value);
+      setImageryIndex(idx);
+    });
+
+    // =========================
+    // 10) Initial view and polish
+    // =========================
+    (async function initView() {
+      await viewer.scene.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(-98.5795, 39.8283, 2.2e6), // CONUS
+        duration: 1.8
+      });
+      viewer.clock.shouldAnimate = true;
+      document.getElementById("btnPlayPause").textContent = "⏸︎ Pause";
+    })();
+
+    // Optional: clean up on unload to avoid WebGL context leaks in hot-reload setups
+    window.addEventListener("unload", () => viewer && viewer.destroy?.());
+  </script>
+</body>
+</html>
