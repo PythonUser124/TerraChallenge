@@ -71,7 +71,7 @@
       baseLayerPicker: true,
       geocoder: false,
       sceneModePicker: true,
-      terrain: Cesium.Terrain.fromWorldTerrain(),
+      terrain: new Cesium.Terrain(Promise.resolve(new Cesium.EllipsoidTerrainProvider())),
       // If you see lighting artifacts in some GPUs, you can disable:
       // shadows: false,
     });
