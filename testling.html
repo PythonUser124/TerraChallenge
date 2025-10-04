@@ -59,6 +59,13 @@
     <span id="loading" class="muted"></span>
     <span id="recStatus" class="muted"></span>
     <span id="conv" class="muted"></span>
+    <select id="firesVariant" title="Fire layer variant">
+      <option value="All" selected>All (best test)</option>
+      <option value="Day">Day</option>
+      <option value="Night">Night</option>
+    </select>
+    <button id="btnTestFires" title="Jump to a known CA fire day/location">🔥 Test Fires</button>
+
   </div>
 
   <!-- Recording indicator -->
@@ -202,9 +209,11 @@
       return layer;
     }
 
-    function addGibsFires(dayStr) {
+    // Fires (MODIS, rasterized points via GIBS). Variants: "Day" | "Night" | "All"
+    function addGibsFires(dayStr, variant = 'All') {
+      const layerId = `MODIS_Combined_Thermal_Anomalies_${variant}`; // Day/Night/All
       const prov = new Cesium.UrlTemplateImageryProvider({
-        url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Combined_Thermal_Anomalies_Day/default/{Time}/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png",
+        url: `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layerId}/default/{Time}/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png`,
         tilingScheme: new Cesium.WebMercatorTilingScheme(),
         maximumLevel: 6,
         credit: "NASA EOSDIS GIBS",
@@ -212,7 +221,11 @@
       });
       silence404(prov);
       const layer = layers.addImageryProvider(prov);
-      layer.rectangle = CA_RECT;
+      layer.rectangle = CA_RECT;       // keep scoped to CA (limits tile requests)
+      // Make the red symbols pop a bit
+      layer.brightness = 1.2;
+      layer.contrast   = 1.25;
+      layer.gamma      = 0.9;
       return layer;
     }
 
@@ -261,14 +274,22 @@
       } else if (ndviLayer) { layers.remove(ndviLayer, true); ndviLayer = null; }
 
       if (showFires) {
-        if (!firesLayer || lastDay !== dayStr) {
+        if (!firesLayer || lastDay !== dayStr || firesLayer.__variant !== firesVariant) {
           firesLayer = await preloadAndCrossfade(
             firesLayer,
-            () => { const L = addGibsFires(dayStr); L.alpha = 0; return L; },
+            () => {
+              const L = addGibsFires(dayStr, firesVariant);
+              L.alpha = 0;    // fade in
+              L.__variant = firesVariant; // tag so we detect changes
+              return L;
+            },
             1.0, 350
           );
         }
-      } else if (firesLayer) { layers.remove(firesLayer, true); firesLayer = null; }
+      } else if (firesLayer) {
+        layers.remove(firesLayer, true); firesLayer = null;
+      }
+
 
       if (showAOD) {
         if (!aodLayer || lastDay !== dayStr) {
@@ -301,6 +322,44 @@
     const speedSel = document.getElementById('speed');
     const loading  = document.getElementById('loading');
     const convNote = document.getElementById('conv');
+
+    let firesVariant = 'All'; // default to 'All' for testing
+    document.getElementById('firesVariant').onchange = (e) => {
+    firesVariant = e.target.value;
+    rebuildFor(viewer.clock.currentTime);
+    };
+
+    // Quick pin helper so you know where to look
+    function addPin(lon, lat, text) {
+      viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(lon, lat),
+        point: { pixelSize: 8, color: Cesium.Color.RED },
+        label: { text, font: '13px sans-serif', pixelOffset: new Cesium.Cartesian2(0, -16) }
+      });
+    }
+
+    // Jump to a date/area with lots of detections (CA, Sep 10, 2020: August Complex, North Complex, Creek Fire era)
+    document.getElementById('btnTestFires').onclick = async () => {
+      // Set a hot date
+      const testJD = Cesium.JulianDate.fromDate(new Date(Date.UTC(2020, 8, 10))); // 2020-09-10
+      viewer.clock.currentTime = testJD;
+      viewer.clock.shouldAnimate = false;
+
+      // Fly a bit tighter over Northern/Central California
+      await viewer.camera.flyTo({
+        destination: Cesium.Rectangle.fromDegrees(-125, 35, -116, 43),
+        duration: 1.2
+      });
+
+      // Optional pins to orient your eye
+      addPin(-123.3, 40.1, 'August Complex (Sep 2020)');
+      addPin(-121.2, 39.8, 'North Complex');
+      addPin(-119.3, 37.2, 'Creek Fire');
+
+      // Rebuild layers for that day (firesVariant is 'All' by default)
+      await rebuildFor(testJD);
+    };
+
 
     chkNDVI.onchange  = () => { showNDVI  = chkNDVI.checked;  rebuildFor(viewer.clock.currentTime); };
     chkFires.onchange = () => { showFires = chkFires.checked; rebuildFor(viewer.clock.currentTime); };
