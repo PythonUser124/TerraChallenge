@@ -1,9 +1,8 @@
- (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
 diff --git a/AnimationStory.html b/AnimationStory.html
-index d18672525e78af237537de470750f6d4364d419d..fee407fe5af10525f89668828c6371a43dfeef9d 100644
+index d18672525e78af237537de470750f6d4364d419d..4fe2407c6e12b7d9d1e411140abb988085f10006 100644
 --- a/AnimationStory.html
 +++ b/AnimationStory.html
-@@ -1,744 +1,1040 @@
+@@ -1,744 +1,1387 @@
 -
 -
 -* Terra layers added: **AOD (Terra)**, **LST (day)**, **Snow Cover (NDSI)**, **Burned Area (monthly)**, **ASTER GDEM hillshade**
@@ -154,6 +153,12 @@ index d18672525e78af237537de470750f6d4364d419d..fee407fe5af10525f89668828c6371a4
 +      font-size: 15px;
 +    }
 +
++    .cap-when {
++      font-weight: 600;
++      opacity: .9;
++      margin-bottom: 6px;
++    }
++
      .metrics {
 -      position:absolute; right:10px; top:10px; z-index:10000;
 -      background:rgba(0,0,0,.55); color:#fff; padding:8px 10px; border-radius:10px;
@@ -209,6 +214,48 @@ index d18672525e78af237537de470750f6d4364d419d..fee407fe5af10525f89668828c6371a4
 +
 +    .info details {
 +      opacity: .95;
++      margin-bottom: 6px;
++    }
++
++    .info details .timeline-content {
++      max-height: 200px;
++      overflow-y: auto;
++      padding-right: 4px;
++    }
++
++    .timeline-group {
++      margin-bottom: 10px;
++    }
++
++    .timeline-group h4 {
++      margin: 0 0 4px;
++      font-size: 13px;
++      text-transform: uppercase;
++      letter-spacing: .6px;
++      opacity: .85;
++    }
++
++    .timeline-entry {
++      margin-left: 8px;
++      margin-bottom: 6px;
++      line-height: 1.35;
++    }
++
++    .timeline-entry strong {
++      display: block;
++      font-size: 12px;
++    }
++
++    .timeline-entry span {
++      display: block;
++      opacity: .9;
++    }
++
++    .timeline-entry em {
++      font-style: normal;
++      opacity: .75;
++      display: block;
++      margin-top: 2px;
 +    }
 +
 +    table.meta-table {
@@ -296,6 +343,7 @@ index d18672525e78af237537de470750f6d4364d419d..fee407fe5af10525f89668828c6371a4
 -  <!-- Caption -->
    <div id="caption" class="caption" aria-live="polite">
      <div class="cap-title" id="capTitle"></div>
++    <div class="cap-when" id="capWhen"></div>
      <div class="cap-why" id="capWhy"></div>
    </div>
  
@@ -339,12 +387,17 @@ index d18672525e78af237537de470750f6d4364d419d..fee407fe5af10525f89668828c6371a4
 -        NDVI is a 16-day composite; clouds can mask short-term changes. Burned Area is monthly (MCD64A1); small fires may be delayed to next month.
 -        AOD (Terra) is a column optical depth (not a 1:1 PM<sub>2.5</sub>); smoke near/aloft varies by day. LST is land skin temperature (not 2-m air).
 -        Snow cover is NDSI-based; patchy snow & shadows may reduce accuracy. ASTER GDEM hillshade is context terrain, not time-varying.
-+        NDVI is a 16-day composite; clouds can mask short-term changes. Burned Area is monthly (MCD64A1); small fires may be delayed.
-+        AOD (Terra) is column optical depth; smoke impacts vary with height. LST is land skin temperature, not 2 m air temperature.
-+        Snow cover is NDSI-based; patchy snow and shadows reduce accuracy. ASTER GDEM hillshade is static context terrain.
-+        FIRMS fire detections are thermal anomalies; icon color shows confidence, size scales with FRP (radiative power).
++        AOD visualizes column smoke, not surface PM one-to-one; surface air can be better or worse than the plume suggests. NDVI is a 16-day composite; short greening or browning spurts and clouds are averaged. Burned Area is monthly; late-month fires may appear in the following month. Snow cover relies on NDSI; patchy snow and shadows reduce accuracy. FIRMS fire detections are thermal anomalies whose color reflects confidence and whose size scales with fire radiative power.
        </div>
      </details>
++    <details open>
++      <summary>🗓️ Timeline & annotations (2011–2025)</summary>
++      <div class="timeline-content" id="timelineContent"></div>
++    </details>
++    <details>
++      <summary>📍 Tiny map callouts</summary>
++      <ul id="calloutList" style="margin:6px 0 0 14px; padding:0; list-style:disc; line-height:1.35"></ul>
++    </details>
    </div>
  
    <script src="./Build/Cesium/Cesium.js"></script>
@@ -383,8 +436,8 @@ index d18672525e78af237537de470750f6d4364d419d..fee407fe5af10525f89668828c6371a4
 -    // Time window & camera on California
 -    const start = Cesium.JulianDate.fromDate(new Date(Date.UTC(2019,0,1)));
 -    const stop  = Cesium.JulianDate.fromDate(new Date(Date.UTC(2021,11,31)));
-+    const start = Cesium.JulianDate.fromDate(new Date(Date.UTC(2019, 0, 1)));
-+    const stop = Cesium.JulianDate.fromDate(new Date(Date.UTC(2021, 11, 31)));
++    const start = Cesium.JulianDate.fromDate(new Date(Date.UTC(2011, 0, 1)));
++    const stop = Cesium.JulianDate.fromDate(new Date(Date.UTC(2025, 11, 31)));
      viewer.clock.startTime = start.clone();
 -    viewer.clock.stopTime  = stop.clone();
 +    viewer.clock.stopTime = stop.clone();
@@ -407,15 +460,15 @@ index d18672525e78af237537de470750f6d4364d419d..fee407fe5af10525f89668828c6371a4
 +    // --- Date helpers -------------------------------------------------------
 +    const pad2 = value => value < 10 ? `0${value}` : String(value);
 +    const formatDay = jd => {
-+      const d = Cesium.JulianDate.toDate(jd);
-+      return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
-+    };
-+    const formatMonth01 = jd => {
        const d = Cesium.JulianDate.toDate(jd);
 -      const day = Math.floor((Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()) - Date.UTC(d.getUTCFullYear(),0,1))/86400000)+1;
 -      const snapped = day - ((day-1) % 16);
 -      const snapDate = new Date(Date.UTC(d.getUTCFullYear(),0,1)); snapDate.setUTCDate(snapped);
 -      return `${snapDate.getUTCFullYear()}-${pad2(snapDate.getUTCMonth()+1)}-${pad2(snapDate.getUTCDate())}`;
++      return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
++    };
++    const formatMonth01 = jd => {
++      const d = Cesium.JulianDate.toDate(jd);
 +      return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-01`;
 +    };
 +    function snapTo16DayISO(jd) {
@@ -505,15 +558,15 @@ index d18672525e78af237537de470750f6d4364d419d..fee407fe5af10525f89668828c6371a4
 +          }
          }
 -        requestAnimationFrame(step);
-+        requestAnimationFrame(fade);
-       });
-     }
+-      });
+-    }
 -    function silence404(provider){
 -      provider && provider.errorEvent.addEventListener((err)=>{
 -        const msg = (err && (err.message||err.error))||"";
 -        if (/404|Not\sFound|NoSuchKey/i.test(String(msg))) err.retry = false;
--      });
--    }
++        requestAnimationFrame(fade);
+       });
+     }
 -    function safeAddProvider(p){
 -      try { const L = layers.addImageryProvider(p); return L; } catch(e){ console.warn('Layer skipped:', e?.message||e); return null; }
 -    }
@@ -1269,14 +1322,34 @@ index d18672525e78af237537de470750f6d4364d419d..fee407fe5af10525f89668828c6371a4
 -        layers: { hill:true, ndvi:true, lst:true, snow:true, burn:false, aod:false, fires:true, firesIcons:true, firesVariant:'All' },
 -        what: 'NDVI & LST during multi-year drought — browning rangelands & stressed Sierra forests; diminished spring snow.',
 -        why:  'Stressed fuels + earlier, hotter summers prime larger fires and reduce water for cities & farms.'
-+        id: "fuel-stress",
-+        title: "Fuel Stress (drought years)",
-+        rect: area(-124.7, 35.0, -118.0, 41.8),
-+        date: "2015-08-16",
++        id: "fuel-stress-snow-loss",
++        title: "Fuel Stress & Snow Loss",
++        rect: area(-123.9, 35.0, -118.4, 41.8),
++        date: "2015-03-20",
 +        cadence: "16d",
-+        layers: { hill: true, ndvi: true, lst: true, snow: true, burn: false, aod: false, fireIcons: true },
-+        what: "NDVI & LST during multi-year drought — browning rangelands & stressed Sierra forests; diminished spring snow.",
-+        why: "Stressed fuels + earlier, hotter summers prime larger fires and reduce water for cities & farms."
++        layers: { hill: true, ndvi: true, lst: true, snow: true, burn: false, aod: false, fireIcons: false },
++        windows: [
++          "2012–2016 drought core fuel stress",
++          "2015-03 to 2015-04 record-low snowpack",
++          "2017-02 to 2017-04 wet rebound comparison"
++        ],
++        what: "NDVI anomalies, land surface temperature, and snow cover reveal drought-driven browning across the Sierra and Central Valley.",
++        why: "Prolonged heat and scant snow weakened photosynthetic carbon production, dried fine fuels, and reduced runoff heading into peak fire seasons."
++      },
++      {
++        id: "ignition-spread",
++        title: "Ignition & Spread (Terrain-steered megafires)",
++        rect: area(-125.3, 35.2, -116.2, 43.2),
++        date: "2020-08-20",
++        cadence: "day",
++        layers: { hill: true, ndvi: false, lst: false, snow: false, burn: true, aod: false, fireIcons: true },
++        windows: [
++          "Spotlights: 2013 Rim, 2014 King, 2015 Valley and Butte",
++          "Spotlights: 2017 Thomas; 2018 Mendocino, Carr, and Camp",
++          "Spotlights: 2019 Kincade; 2020 LNU, SCU, CZU, August Complex; 2021 Dixie and Caldor"
++        ],
++        what: "Burned area footprints and FIRMS fire detections track terrain-steered spread from Rim through Dixie and Caldor.",
++        why: "Slope, wind, and drought-stressed fuels funnel megafire growth and push perimeters toward communities and watersheds."
        },
        {
 -        id:'ignition-spread', title:'Ignition & Spread (Aug/North/Creek 2020)',
@@ -1285,14 +1358,20 @@ index d18672525e78af237537de470750f6d4364d419d..fee407fe5af10525f89668828c6371a4
 -        layers: { hill:true, ndvi:false, lst:false, snow:false, burn:true, aod:false, fires:true, firesIcons:true, firesVariant:'All' },
 -        what: 'Monthly burn scar (MCD64A1) + MODIS hotspots. Terrain shows windward/leeward effects & slope-driven spread.',
 -        why:  'Large burned area aligned with terrain funnels; repeated burns shape habitat and watershed risk.'
-+        id: "ignition-spread",
-+        title: "Ignition & Spread (Aug/North/Creek 2020)",
-+        rect: area(-125, 35, -116, 43),
++        id: "smoke-transport",
++        title: "Smoke, Transport & Exposure",
++        rect: area(-126.0, 35.5, -117.0, 42.5),
 +        date: "2020-09-10",
 +        cadence: "day",
-+        layers: { hill: true, ndvi: false, lst: false, snow: false, burn: true, aod: false, fireIcons: true },
-+        what: "Monthly burn scar (MCD64A1) + MODIS hotspots. Terrain shows windward/leeward effects & slope-driven spread.",
-+        why: "Large burned area aligned with terrain funnels; repeated burns shape habitat and watershed risk."
++        layers: { hill: false, ndvi: false, lst: false, snow: false, burn: false, aod: true, fireIcons: true },
++        windows: [
++          "2018 Jul–Aug Northern California smoke",
++          "2019 Oct 27–31 Kincade smoke",
++          "2020 Aug 19–23 and Sep 9–13 Bay and Valley smoke wall",
++          "2021 Jul–Aug Dixie and Caldor smoke pooling"
++        ],
++        what: "Aerosol optical depth and hotspots trace smoke plumes sweeping the Bay Area, Central Valley, and crest-crossing flows.",
++        why: "Transport episodes drive hazardous air, visibility loss, and public health disruptions far from the ignition zones."
        },
        {
 -        id:'smoke-week', title:'Smoke Week (Bay Area & Valley)',
@@ -1301,14 +1380,19 @@ index d18672525e78af237537de470750f6d4364d419d..fee407fe5af10525f89668828c6371a4
 -        layers: { hill:false, ndvi:false, lst:false, snow:false, burn:false, aod:true, fires:true, firesIcons:true, firesVariant:'All' },
 -        what: 'Daily AOD plumes march across the Central Valley & Bay; hotspots show source fires.',
 -        why:  'Degraded air quality → school closures, respiratory risk, outdoor work curtailment, transit disruptions.'
-+        id: "smoke-week",
-+        title: "Smoke Week (Bay Area & Valley)",
-+        rect: area(-124.7, 36.9, -120.6, 39.1),
-+        date: "2020-09-10",
-+        cadence: "day",
-+        layers: { hill: false, ndvi: false, lst: false, snow: false, burn: false, aod: true, fireIcons: true },
-+        what: "Daily AOD plumes march across the Central Valley & Bay; hotspots show source fires.",
-+        why: "Degraded air quality → school closures, respiratory risk, outdoor work curtailment, transit disruptions."
++        id: "recovery",
++        title: "Recovery (6–24 months)",
++        rect: area(-123.5, 36.5, -118.0, 40.4),
++        date: "2021-06-01",
++        cadence: "16d",
++        layers: { hill: true, ndvi: true, lst: false, snow: false, burn: true, aod: false, fireIcons: false },
++        windows: [
++          "2014–2016 King scar",
++          "2018–2019 Thomas and Carr scars",
++          "2020–2021 CZU, LNU, and Creek scars"
++        ],
++        what: "NDVI anomaly time-series overlay post-fire scars to compare north-facing rebounds with exposed ridges.",
++        why: "Recovery pace flags erosion and debris-flow risk while guiding restoration investments."
        },
        {
 -        id:'recovery', title:'Recovery (6–24 months)',
@@ -1317,14 +1401,17 @@ index d18672525e78af237537de470750f6d4364d419d..fee407fe5af10525f89668828c6371a4
 -        layers: { hill:true, ndvi:true, lst:false, snow:false, burn:true, aod:false, fires:false, firesIcons:false, firesVariant:'All' },
 -        what: 'NDVI rebounding over the burn scar vs. monthly burn perimeter; slower on south-facing slopes.',
 -        why:  'Slow recovery → erosion & debris-flow hazard persists into first winter storms.'
-+        id: "recovery",
-+        title: "Recovery (6–24 months)",
-+        rect: area(-121.2, 36.7, -118.6, 38.1),
-+        date: "2021-08-01",
-+        cadence: "16d",
-+        layers: { hill: true, ndvi: true, lst: false, snow: false, burn: true, aod: false, fireIcons: false },
-+        what: "NDVI rebounding over the burn scar vs. monthly burn perimeter; slower on south-facing slopes.",
-+        why: "Slow recovery → erosion & debris-flow hazard persists into first winter storms."
++        id: "sunlight-energy",
++        title: "Sunlight & Energy (optional wow)",
++        rect: area(-123.5, 36.6, -120.0, 38.9),
++        date: "2020-09-10",
++        cadence: "day",
++        layers: { hill: false, ndvi: false, lst: false, snow: false, burn: false, aod: true, fireIcons: true },
++        windows: [
++          "2020-09-09 to 2020-09-12 solar dimming week"
++        ],
++        what: "Dense smoke over the Bay and Valley dims solar input during the 2020 orange-sky week.",
++        why: "Shortwave anomalies and smoke-driven darkness underscore impacts on energy production and daily life."
        }
      ];
 +
@@ -1354,9 +1441,268 @@ index d18672525e78af237537de470750f6d4364d419d..fee407fe5af10525f89668828c6371a4
 +      chapterSelect.appendChild(option);
 +    });
 +
++    const timelineSections = [
++      {
++        title: "2011 · Baseline green and white",
++        events: [
++          {
++            label: "2011-02 to 2011-04, Sierra and Central Valley",
++            what: "Healthy late-season snowpack and strong NDVI in the lowlands establish the visual baseline.",
++            why: "Sets contrast for drought-era browning and early snow retreat referenced in 2015 and 2020.",
++            source: "Earth Observatory"
++          }
++        ]
++      },
++      {
++        title: "2012–2016 · Multi-year drought and fuel stress",
++        events: [
++          {
++            label: "2012-05 to 2014-09, Foothills and rangelands",
++            what: "Progressive NDVI decline in grass and chaparral belts with hotter land surface temperatures over bare soils.",
++            why: "Prolonged heat and dryness cured fine fuels, stressed forests, and suppressed photosynthetic carbon uptake.",
++            source: "Water Resources California"
++          },
++          {
++            label: "2015-03 to 2015-04, Sierra Nevada snowline",
++            what: "Record-low snowpack exposes granite and bare ground weeks early across the range.",
++            why: "Earlier melt cuts soil moisture and runoff, extending hot-season stress ahead of severe fire behavior.",
++            source: "Terra"
++          }
++        ]
++      },
++      {
++        title: "2013 · Terrain-channeled spread",
++        events: [
++          {
++            label: "2013-08-18 to 2013-09-05, Rim Fire (Yosemite and Tuolumne)",
++            what: "FIRMS hotspots climb canyons toward Yosemite while monthly burned area shows rapid expansion.",
++            why: "Steep topography and dry mixed-conifer fuels enabled one of the decade's signature Sierra fires.",
++            source: "Earth Observatory"
++          }
++        ]
++      },
++      {
++        title: "2014 · Steep slopes and rapid runs",
++        events: [
++          {
++            label: "2014-09-14 to 2014-09-25, King Fire (Eldorado National Forest)",
++            what: "Hotspots funnel up the American River canyons and scars concentrate on windward slopes.",
++            why: "Highlights slope and wind alignment plus high-severity patches that recover slowly.",
++            source: "Earth Observatory"
++          }
++        ]
++      },
++      {
++        title: "2015 · Drought culmination and WUI impact",
++        events: [
++          {
++            label: "2015-09-09 to 2015-10-01, Butte Fire (Amador and Calaveras)",
++            what: "Hotspots surge from a powerline ignition while the monthly scar advances toward wildland-urban corridors.",
++            why: "Shows drought-era vulnerability of foothill communities amid utility ignitions.",
++            source: "CAL FIRE"
++          },
++          {
++            label: "2015-09-12 to 2015-10-15, Valley Fire (Lake County)",
++            what: "Explosive expansion over 24–48 hours with AOD plumes drifting over the North Bay.",
++            why: "Fast-moving wildland-urban disaster during peak drought stress with major structure losses.",
++            source: "CAL FIRE"
++          }
++        ]
++      },
++      {
++        title: "2017 · Wet rebound and coastal mega",
++        events: [
++          {
++            label: "2017-02 to 2017-04, Sierra",
++            what: "Wet-year snowpack rebound and greener hills compared with 2015.",
++            why: "Loads the landscape with grasses and brush—a fuel pulse that set up 2018 severity.",
++            source: "NASA Science"
++          },
++          {
++            label: "2017-12-04 to 2017-12-20, Thomas Fire (Ventura and Santa Barbara)",
++            what: "Downslope winds drive hotspots west and east while smoke floods coastal basins.",
++            why: "At the time California's largest modern fire, highlighting coastal smoke exposure far from forests.",
++            source: "Earth Observatory"
++          }
++        ]
++      },
++      {
++        title: "2018 · Record acreage and destructive WUI",
++        events: [
++          {
++            label: "2018-07-27 to 2018-08-10, Mendocino Complex and Carr",
++            what: "Twin plumes and expanding scars stretch across North Coast ranges and near Redding.",
++            why: "Largest on record at the time with extreme pyrocumulus and drought-cured dead fuels still contributing.",
++            source: "Earth Observatory"
++          },
++          {
++            label: "2018-11-08 to 2018-11-25, Camp Fire (Paradise and Butte County)",
++            what: "Rapid ignition and spread from Feather River canyons with AOD and CO spikes over the Sacramento Valley.",
++            why: "Deadliest and most destructive California wildfire, showing community-scale exposure and evacuation impacts.",
++            source: "Wikipedia"
++          }
++        ]
++      },
++      {
++        title: "2019 · Wind-driven WUI and smoke pulses",
++        events: [
++          {
++            label: "2019-10-26 to 2019-10-31, Kincade Fire (Sonoma)",
++            what: "Wind-aligned hotspots sweep into northeastern Sonoma as smoke pushes toward the coast and Bay.",
++            why: "Illustrates public safety power shutoff era and late-season wind events driving smoke over dense population centers.",
++            source: "Earth Observatory"
++          }
++        ]
++      },
++      {
++        title: "2020 · Lightning sieges to historic smoke",
++        events: [
++          {
++            label: "2020-08-17 to 2020-08-27, LNU and SCU Lightning Complexes (Wine Country and Diablo Range)",
++            what: "Hundreds of lightning ignitions with massive scars blooming within days.",
++            why: "Simultaneous large fires near major metros anchor the land-to-fire step in the story.",
++            source: "Earth Observatory"
++          },
++          {
++            label: "2020-08-16 to 2020-09-30, CZU Lightning Complex (Santa Cruz Mountains)",
++            what: "Coastal redwood and chaparral burn with monthly scars showing ridge-to-coast spread.",
++            why: "Rare coastal forest impact adjacent to Bay Area population centers.",
++            source: "Earth Observatory"
++          },
++          {
++            label: "2020-08-17 to 2020-10-06, August Complex (Mendocino and Trinity)",
++            what: "Persistent hotspots over weeks with burned area surpassing one million acres.",
++            why: "California's first modern gigafire demonstrates unconstrained spread across remote terrain.",
++            source: "NASA"
++          },
++          {
++            label: "2020-08-19 to 2020-08-23, Bay and Valley smoke arrival",
++            what: "MODIS aerosol plumes flood the Bay, Delta, and San Joaquin with elevated CO over the trough.",
++            why: "First regional smoke episode prompts school closures, outdoor work stoppages, and air-quality alerts.",
++            source: "Earth Observatory"
++          },
++          {
++            label: "2020-09-09 to 2020-09-13, Bay Area and Central Valley orange sky",
++            what: "Dense lofted smoke over the marine layer dims midday light and degrades air quality.",
++            why: "Iconic exposure moment to pair with MISR plume heights for judges and audiences.",
++            source: "Earth Observatory"
++          }
++        ]
++      },
++      {
++        title: "2021 · Crest-crossing fire runs and prolonged smoke",
++        events: [
++          {
++            label: "2021-07-14 to 2021-08-15, Dixie Fire (Northern Sierra and Southern Cascades)",
++            what: "Hotspots march along canyons as the scar grows into the state's second-largest fire and plumes spill east.",
++            why: "Shows long-duration spread with smoke transport into the Great Basin.",
++            source: "Earth Observatory"
++          },
++          {
++            label: "2021-08-14 to 2021-09-01, Caldor Fire (El Dorado to Tahoe Basin)",
++            what: "Fire crosses Highway 50 and pushes toward South Lake Tahoe with sustained smoke in Tahoe and Reno basins.",
++            why: "Rare crest-crossing spread into a major alpine tourist hub with clear people impacts.",
++            source: "Wikipedia"
++          },
++          {
++            label: "2021-07-25 to 2021-08-20, Regional smoke pooling",
++            what: "Aerosol plumes linger in the Sacramento–San Joaquin trough and Lake Tahoe basin under weak winds.",
++            why: "Basin geometry traps smoke overnight, creating multi-day air-quality and transit disruptions.",
++            source: "Earth Observatory"
++          }
++        ]
++      },
++      {
++        title: "Recovery snapshots",
++        events: [
++          {
++            label: "2019-05, Thomas and Carr scars",
++            what: "NDVI rebound along riparian corridors and north-facing slopes with slow regrowth on exposed ridges.",
++            why: "Aspect and moisture control half-time recovery for outreach on landscape triage.",
++            source: "Earth Observatory"
++          },
++          {
++            label: "2021-03, CZU, LNU, and Creek 2020 scars",
++            what: "Patchy early recovery in moister microsites while brown patches persist on south-facing slopes.",
++            why: "Supports messaging on erosion and debris-flow risk heading into the first wet season.",
++            source: "Earth Observatory"
++          },
++          {
++            label: "2021-06, CZU, LNU, and Creek 2020 scars",
++            what: "Early-summer greening highlights where canopy and groundcover are returning versus staying bare.",
++            why: "Helps teams plan reforestation, hazard mitigation, and monitoring revisits.",
++            source: "Earth Observatory"
++          }
++        ]
++      },
++      {
++        title: "Sunlight and energy",
++        events: [
++          {
++            label: "2020-09-09 to 2020-09-12, Bay and Central Valley",
++            what: "Aerosol optical depth peaks coincide with lower surface shortwave flux through the orange-sky week.",
++            why: "Regional solar generation dipped 10–30 percent during the peaks, tying smoke to economic impacts.",
++            source: "U.S. Energy Information Administration"
++          }
++        ]
++      }
++    ];
++
++    const timelineContent = document.getElementById("timelineContent");
++    if (timelineContent) {
++      timelineContent.innerHTML = "";
++      timelineSections.forEach(section => {
++        const group = document.createElement("div");
++        group.className = "timeline-group";
++        const heading = document.createElement("h4");
++        heading.textContent = section.title;
++        group.appendChild(heading);
++        section.events.forEach(event => {
++          const entry = document.createElement("div");
++          entry.className = "timeline-entry";
++          const label = document.createElement("strong");
++          label.textContent = event.label;
++          entry.appendChild(label);
++          const what = document.createElement("span");
++          what.textContent = `What: ${event.what}`;
++          entry.appendChild(what);
++          const why = document.createElement("span");
++          why.textContent = `Why: ${event.why}`;
++          entry.appendChild(why);
++          if (event.source) {
++            const source = document.createElement("em");
++            source.textContent = event.source;
++            entry.appendChild(source);
++          }
++          group.appendChild(entry);
++        });
++        timelineContent.appendChild(group);
++      });
++    }
++
++    const callouts = [
++      "Delta and Carquinez gaps: Wind gaps accelerate plume transport into the Valley—watch nighttime pooling.",
++      "South Bay basin: Morning aerosol optical depth stays elevated as smoke settles under inversions.",
++      "Sierra crest: Lofted plumes overtop into Nevada during synoptic wind shifts."
++    ];
++
++    const calloutList = document.getElementById("calloutList");
++    if (calloutList) {
++      calloutList.innerHTML = "";
++      callouts.forEach(text => {
++        const item = document.createElement("li");
++        item.textContent = text;
++        calloutList.appendChild(item);
++      });
++    }
++
 +    function updateCaption(chapter) {
 +      const caption = document.getElementById("caption");
 +      document.getElementById("capTitle").textContent = chapter.what;
++      const whenText = Array.isArray(chapter.windows) && chapter.windows.length ? chapter.windows.join(" • ") : (chapter.dateRange || chapter.date || "");
++      const capWhen = document.getElementById("capWhen");
++      capWhen.textContent = whenText;
++      capWhen.style.display = whenText ? "block" : "none";
 +      document.getElementById("capWhy").textContent = chapter.why;
 +      document.getElementById("mChapter").textContent = chapter.title;
 +      caption.classList.remove("show");
@@ -1590,6 +1936,3 @@ index d18672525e78af237537de470750f6d4364d419d..fee407fe5af10525f89668828c6371a4
  </body>
  </html>
 -
- 
-EOF
-)
