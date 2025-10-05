@@ -1,9 +1,14 @@
 {
-  "name": "terrachallenge",
-  "version": "1.0.0",
-  "description": "Terra Challenge Cesium viewer",
-  "type": "module",
   "scripts": {
-    "test": "node tests/smoke.test.js"
+    "prebake:ca:long": "node tools/prebake-firms.mjs --start 1999-01 --end 2025-10 --bbox -125,32,-113.5,43 --out ./data/firms --sources MODIS_SP,VIIRS_SNPP_SP,VIIRS_NOAA20_SP,VIIRS_NOAA21_NRT",
+    "serve": "node tools/serve-static.mjs"
+  },
+  "dependencies": {
+    "csv-parse": "^6.1.0",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "fs-extra": "^11.3.2",
+    "undici": "^7.16.0",
+    "yargs": "^18.0.0"
   }
 }
