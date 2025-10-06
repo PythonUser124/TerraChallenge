@@ -1,95 +1,215 @@
-
-
-* Terra layers added: **AOD (Terra)**, **LST (day)**, **Snow Cover (NDSI)**, **Burned Area (monthly)**, **ASTER GDEM hillshade**
-* A **chapters** system (camera + date snap + visible layers + 2-line caption)
-* Your **FIRMS vector icons** reading local monthly GeoJSON (kept & tightened)
-* A minimalist **caption bar**, an **info/caveats** panel, and small **metrics** (fires in view, current chapter)
-* Existing **recording** tools kept working
-
-> Put your monthly FIRMS files at `./data/firms/CA-YYYY-MM.geojson`.
-> If a GIBS layer name ever changes, the code logs a gentle note and just skips that layer for that date.
-
-```html
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <title>Terra → Fire → Smoke → People (California Arc)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Local Cesium build -->
   <link rel="stylesheet" href="./Build/Cesium/Widgets/widgets.css">
   <style>
-    html, body, #cesiumContainer { width:100%; height:100%; margin:0; padding:0; overflow:hidden; background:#0b1120; }
-    /* Toolbar */
-    .toolbar {
-      position:absolute; top:10px; left:10px; z-index:10000;
-      display:flex; align-items:center; gap:8px; padding:10px 12px;
-      background:rgba(0,0,0,.55); border-radius:12px; color:#fff;
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial;
-      box-shadow:0 10px 30px rgba(0,0,0,.4); user-select:none;
+    :root {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Helvetica, Arial, sans-serif;
+      color-scheme: dark;
     }
-    .toolbar label { display:flex; align-items:center; gap:6px; font-size:13px; opacity:.95; white-space:nowrap; }
-    .toolbar button, .toolbar select {
-      background:#111827; color:#e5e7eb; border:1px solid #374151;
-      padding:6px 10px; border-radius:8px; cursor:pointer; font-weight:600; font-size:13px;
+
+    html,
+    body,
+    #cesiumContainer {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #0b1120;
     }
-    .toolbar button:hover { background:#1f2937; }
-    .toolbar .muted { opacity:.85; font-size:12px; }
-    .toolbar .spacer { width:8px; height:1px; }
-    /* Caption bar */
+
+    .toolbar,
+    .metrics,
+    .info,
+    #ndviLegend,
     .caption {
-      position:absolute; left:50%; transform:translateX(-50%); bottom:16px; z-index:10000;
-      max-width:min(900px, 90vw);
-      background:linear-gradient(180deg, rgba(0,0,0,.40), rgba(0,0,0,.70));
-      color:#f9fafb; padding:10px 14px; border-radius:12px;
-      font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial;
-      box-shadow:0 18px 50px rgba(0,0,0,.45);
-      opacity:0; transition:opacity .35s ease;
+      position: absolute;
+      z-index: 10000;
+      background: rgba(0, 0, 0, .55);
+      color: #fff;
+      border-radius: 12px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, .45);
     }
-    .caption.show { opacity:1; }
-    .cap-title { font-weight:800; letter-spacing:.3px; margin-bottom:4px; font-size:15px; }
-    .cap-why { opacity:.95 }
-    /* Small metrics pill */
+
+    .toolbar {
+      top: 12px;
+      left: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 14px;
+    }
+
+    .toolbar label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      opacity: .95;
+      white-space: nowrap;
+    }
+
+    .toolbar button,
+    .toolbar select {
+      background: #111827;
+      color: #e5e7eb;
+      border: 1px solid #374151;
+      padding: 6px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .toolbar button:hover,
+    .toolbar select:hover {
+      background: #1f2937;
+    }
+
+    .toolbar .spacer {
+      width: 12px;
+      height: 1px;
+      flex: 0 0 12px;
+    }
+
+    .toolbar .muted {
+      opacity: .75;
+      font-size: 12px;
+    }
+
+    .caption {
+      left: 50%;
+      bottom: 16px;
+      transform: translateX(-50%);
+      max-width: min(900px, 90vw);
+      padding: 12px 16px;
+      background: linear-gradient(180deg, rgba(0, 0, 0, .40), rgba(0, 0, 0, .70));
+      font-size: 14px;
+      line-height: 1.45;
+      opacity: 0;
+      transition: opacity .35s ease;
+    }
+
+    .caption.show {
+      opacity: 1;
+    }
+
+    .cap-title {
+      font-weight: 800;
+      letter-spacing: .3px;
+      margin-bottom: 4px;
+      font-size: 15px;
+    }
+
+    .cap-when {
+      font-weight: 600;
+      opacity: .9;
+      margin-bottom: 6px;
+    }
+
     .metrics {
-      position:absolute; right:10px; top:10px; z-index:10000;
-      background:rgba(0,0,0,.55); color:#fff; padding:8px 10px; border-radius:10px;
-      font:12px system-ui; box-shadow:0 10px 30px rgba(0,0,0,.4);
-      min-width:190px;
+      top: 12px;
+      right: 12px;
+      padding: 10px 12px;
+      font-size: 12px;
+      min-width: 190px;
     }
-    .metrics b { font-weight:800 }
-    /* NDVI legend (kept) */
+
     #ndviLegend {
-      position:absolute; right:10px; bottom:10px; z-index:10000;
-      background:rgba(0,0,0,.55); color:#fff; padding:8px 10px; border-radius:10px;
-      font:12px system-ui; box-shadow:0 10px 30px rgba(0,0,0,.4)
+      right: 12px;
+      bottom: 12px;
+      padding: 10px 12px;
+      font-size: 12px;
     }
-    /* REC badge */
-    .rec-badge {
-      position:absolute; top:10px; right:10px; z-index:10001;
-      display:flex; align-items:center; gap:8px;
-      background:rgba(220,38,38,.92); color:#fff; font-weight:700;
-      padding:6px 12px; border-radius:9999px; box-shadow:0 10px 30px rgba(0,0,0,.4);
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial;
-    }
-    .rec-dot { width:10px; height:10px; background:#fff; border-radius:50%; animation:pulse 1s infinite; }
-    @keyframes pulse { 0%{opacity:1} 50%{opacity:.3} 100%{opacity:1} }
-    .hidden { display:none; }
-    /* Info/caveats */
+
     .info {
-      position:absolute; bottom:14px; left:10px; z-index:10000;
-      background:rgba(0,0,0,.55); color:#fff; padding:8px 10px; border-radius:10px;
-      font:12px system-ui; box-shadow:0 10px 30px rgba(0,0,0,.4); max-width:min(520px, 90vw);
+      left: 12px;
+      bottom: 12px;
+      padding: 10px 12px;
+      font-size: 12px;
+      max-width: min(520px, 90vw);
     }
-    .info details { opacity:.95 }
-    .info summary { cursor:pointer; font-weight:700; }
+
+    .info summary {
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .info details {
+      opacity: .95;
+      margin-bottom: 6px;
+    }
+
+    .info details .timeline-content {
+      max-height: 200px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .timeline-group {
+      margin-bottom: 10px;
+    }
+
+    .timeline-group h4 {
+      margin: 0 0 4px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      opacity: .85;
+    }
+
+    .timeline-entry {
+      margin-left: 8px;
+      margin-bottom: 6px;
+      line-height: 1.35;
+    }
+
+    .timeline-entry strong {
+      display: block;
+      font-size: 12px;
+    }
+
+    .timeline-entry span {
+      display: block;
+      opacity: .9;
+    }
+
+    .timeline-entry em {
+      font-style: normal;
+      opacity: .75;
+      display: block;
+      margin-top: 2px;
+    }
+
+    table.meta-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    table.meta-table td {
+      padding: 2px 0;
+    }
   </style>
 </head>
-
 <body>
-  <div id="cesiumContainer"></div>
+  <!--
+    QUICK GUIDE
+    ===========
+    • Put monthly FIRMS GeoJSON files at: ./data/firms/CA-YYYY-MM.geojson
+    • Update the "chapters" array near the bottom to edit camera bookmarks, default layers, and captions.
+    • Layers stream from public NASA GIBS WMTS endpoints; availability may lag for a given day/month.
+  -->
 
-  <!-- Controls -->
-  <div class="toolbar">
+  <div id="cesiumContainer" role="presentation"></div>
+
+  <div class="toolbar" role="group" aria-label="Layer and story controls">
     <label><input id="chkHill" type="checkbox" checked> ASTER Hillshade</label>
     <label><input id="chkNDVI" type="checkbox" checked> NDVI (16-day)</label>
     <label><input id="chkLST" type="checkbox"> LST (day)</label>
@@ -97,57 +217,44 @@
     <label><input id="chkBurn" type="checkbox"> Burned Area (monthly)</label>
     <label><input id="chkAOD" type="checkbox"> Aerosol (Terra)</label>
 
-    <span class="spacer"></span>
-    <label><input id="chkFires" type="checkbox" checked> FIRMS (raster)</label>
-    <label><input id="chkFiresIcons" type="checkbox" checked> Fire Icons (vector)</label>
-    <select id="firesVariant" title="Fire layer variant">
-      <option value="All" selected>Fires: All</option>
-      <option value="Day">Fires: Day</option>
-      <option value="Night">Fires: Night</option>
-    </select>
+    <span class="spacer" aria-hidden="true"></span>
+    <label><input id="chkFiresIcons" type="checkbox" checked> Fire detections (FIRMS)</label>
 
-    <span class="spacer"></span>
-    <button id="btnPrev">⟵ Prev</button>
+    <span class="spacer" aria-hidden="true"></span>
+    <button id="btnPrev" type="button">⟵ Prev</button>
     <select id="chapterSel" title="Storyboard chapters"></select>
-    <button id="btnNext">Next ⟶</button>
+    <button id="btnNext" type="button">Next ⟶</button>
 
-    <span class="spacer"></span>
-    <button id="btnPlay" title="Play/Pause timeline">⏯︎</button>
+    <span class="spacer" aria-hidden="true"></span>
+    <button id="btnPlay" type="button" title="Play / pause timeline">⏯︎</button>
     <select id="speed" title="Playback speed">
       <option value="600">600×</option>
       <option value="2400" selected>2400×</option>
       <option value="86400">86400×</option>
     </select>
 
-    <span class="spacer"></span>
-    <button id="btnTestFires" title="Go to CA 2020-09-10">🔥 Test Fires</button>
+    <span class="spacer" aria-hidden="true"></span>
+    <button id="btnTestFires" type="button" title="Jump to California 2020‑09‑10">🔥 Test Fires</button>
 
-    <span class="spacer"></span>
-    <button id="recStart" title="Start LIVE recording (24 fps)">⏺ Live</button>
-    <button id="recStop" disabled title="Stop recording">⏹ Stop</button>
-    <button id="recScripted" title="Scripted step-hold capture">🎬 Scripted</button>
-    <button id="convertMp4" disabled title="Convert last WebM to MP4">➡️ MP4</button>
-    <span id="loading" class="muted"></span>
-    <span id="conv" class="muted"></span>
+    <span class="spacer" aria-hidden="true"></span>
+    <span id="loading" class="muted" role="status"></span>
   </div>
 
-  <!-- Caption -->
   <div id="caption" class="caption" aria-live="polite">
     <div class="cap-title" id="capTitle"></div>
+    <div class="cap-when" id="capWhen"></div>
     <div class="cap-why" id="capWhy"></div>
   </div>
 
-  <!-- Metrics -->
   <div class="metrics" id="metrics">
-    <div><b>Chapter</b>: <span id="mChapter">—</span></div>
-    <div><b>Date</b>: <span id="mDate">—</span></div>
-    <div><b>FIRMS icons in view</b>: <span id="mIcons">0</span></div>
+    <div><strong>Chapter</strong>: <span id="mChapter">—</span></div>
+    <div><strong>Date</strong>: <span id="mDate">—</span></div>
+    <div><strong>Fire detections in view</strong>: <span id="mIcons">0</span></div>
     <div id="mNotes" style="opacity:.85"></div>
   </div>
 
-  <!-- NDVI legend -->
   <div id="ndviLegend">
-    <div style="font-weight:700;margin-bottom:6px">NDVI (16-day)</div>
+    <div style="font-weight:700;margin-bottom:6px">NDVI (16‑day)</div>
     <div style="display:flex;align-items:center;gap:8px">
       <div style="width:160px;height:10px;background:linear-gradient(to right,#6e6e6e,#c9d66b,#4caf50,#006400)"></div>
       <div style="white-space:nowrap">low → high</div>
@@ -157,588 +264,1124 @@
     </div>
   </div>
 
-  <!-- Recording indicator -->
-  <div id="recBadge" class="rec-badge hidden" aria-live="polite">
-    <div class="rec-dot"></div>
-    <span id="recMode">REC</span>
-    <span id="recTime">00:00</span>
-  </div>
-
-  <!-- Info / caveats -->
   <div class="info">
-    <details>
+    <details open>
       <summary>ℹ️ Integrity & caveats</summary>
       <div style="margin-top:6px; line-height:1.35">
-        NDVI is a 16-day composite; clouds can mask short-term changes. Burned Area is monthly (MCD64A1); small fires may be delayed to next month.
-        AOD (Terra) is a column optical depth (not a 1:1 PM<sub>2.5</sub>); smoke near/aloft varies by day. LST is land skin temperature (not 2-m air).
-        Snow cover is NDSI-based; patchy snow & shadows may reduce accuracy. ASTER GDEM hillshade is context terrain, not time-varying.
+        AOD visualizes column smoke, not surface PM one-to-one; surface air can be better or worse than the plume suggests. NDVI is a 16-day composite; short greening or browning spurts and clouds are averaged. Burned Area is monthly; late-month fires may appear in the following month. Snow cover relies on NDSI; patchy snow and shadows reduce accuracy. FIRMS fire detections are thermal anomalies whose color reflects confidence and whose size scales with fire radiative power.
       </div>
+    </details>
+    <details open>
+      <summary>🗓️ Timeline & annotations (2011–2025)</summary>
+      <div class="timeline-content" id="timelineContent"></div>
+    </details>
+    <details>
+      <summary>📍 Tiny map callouts</summary>
+      <ul id="calloutList" style="margin:6px 0 0 14px; padding:0; list-style:disc; line-height:1.35"></ul>
     </details>
   </div>
 
   <script src="./Build/Cesium/Cesium.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/ffmpeg.min.js"></script>
-
   <script>
-    // ============ Viewer ============
+    /*
+      STORY ENGINE OVERVIEW
+      =====================
+      • Rebuild imagery layers whenever the date or toggles change.
+      • Fire detections pull from local monthly FIRMS GeoJSON files (./data/firms/CA-YYYY-MM.geojson).
+      • Chapters define camera bounds, target date, cadence, default layer visibility, and captions.
+      • Editing the story only requires adjusting the "chapters" array below.
+    */
+
+    // --- Viewer setup -------------------------------------------------------
     const viewer = new Cesium.Viewer("cesiumContainer", {
-      animation: true, timeline: true, baseLayerPicker: false, geocoder: false, sceneModePicker: true
+      animation: true,
+      timeline: true,
+      baseLayerPicker: false,
+      geocoder: false,
+      sceneModePicker: true
     });
+
     viewer.scene.globe.enableLighting = true;
-    viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#0b1120');
+    viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#0b1120");
     viewer.scene.skyAtmosphere.show = false;
     viewer.shadows = false;
     viewer.scene.requestRenderMode = false;
-    viewer.infoBox.frame.setAttribute('sandbox','allow-same-origin allow-popups allow-forms allow-scripts');
+    viewer.infoBox.frame.setAttribute("sandbox", "allow-same-origin allow-popups allow-forms allow-scripts");
 
-    // Time window & camera on California
-    const start = Cesium.JulianDate.fromDate(new Date(Date.UTC(2019,0,1)));
-    const stop  = Cesium.JulianDate.fromDate(new Date(Date.UTC(2021,11,31)));
+    const start = Cesium.JulianDate.fromDate(new Date(Date.UTC(2011, 0, 1)));
+    const stop = Cesium.JulianDate.fromDate(new Date(Date.UTC(2025, 11, 31)));
     viewer.clock.startTime = start.clone();
-    viewer.clock.stopTime  = stop.clone();
+    viewer.clock.stopTime = stop.clone();
     viewer.clock.currentTime = start.clone();
     viewer.clock.clockRange = Cesium.ClockRange.CLAMPED;
     viewer.clock.multiplier = 2400;
     viewer.timeline.zoomTo(start, stop);
+
     const CA_RECT = Cesium.Rectangle.fromDegrees(-125.0, 32.0, -113.5, 43.0);
     viewer.camera.flyTo({ destination: CA_RECT, duration: 0 });
 
-    // Helpers
-    const pad2 = n => (n<10?'0':'')+n;
-    const ymd  = jd => { const d=Cesium.JulianDate.toDate(jd); return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth()+1)}-${pad2(d.getUTCDate())}`; };
-    const ym01 = jd => { const d=Cesium.JulianDate.toDate(jd); return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth()+1)}-01`; };
-    function snapTo16DayISO(jd){
-      const d = Cesium.JulianDate.toDate(jd);
-      const day = Math.floor((Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()) - Date.UTC(d.getUTCFullYear(),0,1))/86400000)+1;
-      const snapped = day - ((day-1) % 16);
-      const snapDate = new Date(Date.UTC(d.getUTCFullYear(),0,1)); snapDate.setUTCDate(snapped);
-      return `${snapDate.getUTCFullYear()}-${pad2(snapDate.getUTCMonth()+1)}-${pad2(snapDate.getUTCDate())}`;
-    }
-
-    // Tile progress tracker
     const layers = viewer.imageryLayers;
     layers.removeAll();
+
+    // --- Date helpers -------------------------------------------------------
+    const pad2 = value => value < 10 ? `0${value}` : String(value);
+    const formatDay = jd => {
+      const d = Cesium.JulianDate.toDate(jd);
+      return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+    };
+    const formatMonth01 = jd => {
+      const d = Cesium.JulianDate.toDate(jd);
+      return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-01`;
+    };
+    function snapTo16DayISO(jd) {
+      const d = Cesium.JulianDate.toDate(jd);
+      const day = Math.floor((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - Date.UTC(d.getUTCFullYear(), 0, 1)) / 86400000) + 1;
+      const snapped = day - ((day - 1) % 16);
+      const snapDate = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+      snapDate.setUTCDate(snapped);
+      return `${snapDate.getUTCFullYear()}-${pad2(snapDate.getUTCMonth() + 1)}-${pad2(snapDate.getUTCDate())}`;
+    }
+
+    // --- Imagery loading helpers -------------------------------------------
     let tileProgress = 0;
     viewer.scene.globe.tileLoadProgressEvent.addEventListener(n => { tileProgress = n; });
 
     function waitUntilTilesSettled(baseline, timeoutMs = 9000) {
-      return new Promise((resolve) => {
-        let stable = 0; const t0 = performance.now();
-        function tick(){
-          if (tileProgress <= baseline) stable++; else stable = 0;
-          if (stable >= 2 || (performance.now()-t0)>timeoutMs) resolve();
-          else requestAnimationFrame(tick);
-        }
-        requestAnimationFrame(tick);
-      });
-    }
-    async function preloadAndCrossfade(oldLayer, buildNewLayer, targetAlpha=1.0, fadeMs=350){
-      const baseline = tileProgress;
-      const newLayer = buildNewLayer();
-      if (!newLayer) return oldLayer;
-      newLayer.alpha = 0.0001; newLayer.show = true;
-      await waitUntilTilesSettled(baseline);
-      return new Promise((resolve)=>{
-        const t0 = performance.now();
-        function step(t){
-          const k = Math.min((t-t0)/fadeMs,1);
-          newLayer.alpha = targetAlpha*k;
-          if (oldLayer) oldLayer.alpha = (1-k)*(oldLayer.alpha ?? 1);
-          viewer.scene.requestRender();
-          if (k<1) requestAnimationFrame(step); else { if (oldLayer) layers.remove(oldLayer, true); resolve(newLayer); }
+      return new Promise(resolve => {
+        let stable = 0;
+        const started = performance.now();
+        function step() {
+          stable = tileProgress <= baseline ? stable + 1 : 0;
+          if (stable >= 2 || (performance.now() - started) > timeoutMs) {
+            resolve();
+          } else {
+            requestAnimationFrame(step);
+          }
         }
         requestAnimationFrame(step);
       });
     }
-    function silence404(provider){
-      provider && provider.errorEvent.addEventListener((err)=>{
-        const msg = (err && (err.message||err.error))||"";
-        if (/404|Not\sFound|NoSuchKey/i.test(String(msg))) err.retry = false;
+
+    function silence404(provider) {
+      if (!provider) return;
+      provider.errorEvent.addEventListener(evt => {
+        const message = (evt && (evt.message || evt.error)) || "";
+        if (/404|Not\sFound|NoSuchKey/i.test(String(message))) evt.retry = false;
       });
-    }
-    function safeAddProvider(p){
-      try { const L = layers.addImageryProvider(p); return L; } catch(e){ console.warn('Layer skipped:', e?.message||e); return null; }
     }
 
-    // ======== Terra/GIBS Imagery Providers (token-free) ========
-    // Context hillshade (ASTER GDEM)
-    function addAsterHillshade(){
-      const prov = new Cesium.UrlTemplateImageryProvider({
-        url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/ASTER_GDEM_Color_Shaded_Relief/default/2000-01-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg",
-        tilingScheme: new Cesium.WebMercatorTilingScheme(), maximumLevel: 8, credit: "NASA EOSDIS GIBS"
-      });
-      silence404(prov);
-      const L = safeAddProvider(prov); if (L){ L.rectangle = CA_RECT; L.brightness = 0.9; L.contrast = 1.05; }
-      return L;
+    function safeAddProvider(provider) {
+      try {
+        return layers.addImageryProvider(provider);
+      } catch (error) {
+        console.warn("Layer skipped:", error?.message || error);
+        return null;
+      }
     }
-    // VIIRS true color (daily)
-    function addViirsTrueColor(dayStr){
-      const prov = new Cesium.UrlTemplateImageryProvider({
+
+    async function preloadAndCrossfade(oldLayer, buildLayer, targetAlpha = 1, fadeMs = 350) {
+      const baseline = tileProgress;
+      const layer = buildLayer();
+      if (!layer) return oldLayer;
+      layer.alpha = 0.0001;
+      layer.show = true;
+      await waitUntilTilesSettled(baseline);
+      return new Promise(resolve => {
+        const started = performance.now();
+        function fade(now) {
+          const t = Math.min((now - started) / fadeMs, 1);
+          layer.alpha = targetAlpha * t;
+          if (oldLayer) oldLayer.alpha = (1 - t) * (oldLayer.alpha ?? 1);
+          viewer.scene.requestRender();
+          if (t < 1) requestAnimationFrame(fade); else {
+            if (oldLayer) layers.remove(oldLayer, true);
+            resolve(layer);
+          }
+        }
+        requestAnimationFrame(fade);
+      });
+    }
+
+    // --- Imagery providers --------------------------------------------------
+    function addAsterHillshade() {
+      const provider = new Cesium.UrlTemplateImageryProvider({
+        url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/ASTER_GDEM_Color_Shaded_Relief/default/2000-01-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg",
+        tilingScheme: new Cesium.WebMercatorTilingScheme(),
+        maximumLevel: 8,
+        credit: "NASA EOSDIS GIBS"
+      });
+      silence404(provider);
+      const layer = safeAddProvider(provider);
+      if (layer) {
+        layer.rectangle = CA_RECT;
+        layer.brightness = 0.9;
+        layer.contrast = 1.05;
+      }
+      return layer;
+    }
+
+    function addViirsTrueColor(dayStr) {
+      const provider = new Cesium.UrlTemplateImageryProvider({
         url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/{Time}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg",
-        tilingScheme: new Cesium.WebMercatorTilingScheme(), maximumLevel: 8, credit: "NASA EOSDIS GIBS",
+        tilingScheme: new Cesium.WebMercatorTilingScheme(),
+        maximumLevel: 8,
+        credit: "NASA EOSDIS GIBS",
         customTags: { Time: () => dayStr }
       });
-      silence404(prov);
-      const L = safeAddProvider(prov); if (L) L.rectangle = CA_RECT;
-      return L;
+      silence404(provider);
+      const layer = safeAddProvider(provider);
+      if (layer) layer.rectangle = CA_RECT;
+      return layer;
     }
-    // NDVI (16-day) — Terra
-    function addNdvi16Day(dayStr16){
-      const prov = new Cesium.UrlTemplateImageryProvider({
+
+    function addNdvi16Day(dayStr16) {
+      const provider = new Cesium.UrlTemplateImageryProvider({
         url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_L3_NDVI_16Day/default/{Time}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png",
-        tilingScheme: new Cesium.WebMercatorTilingScheme(), maximumLevel: 7, credit: "NASA EOSDIS GIBS",
+        tilingScheme: new Cesium.WebMercatorTilingScheme(),
+        maximumLevel: 7,
+        credit: "NASA EOSDIS GIBS",
         customTags: { Time: () => dayStr16 }
       });
-      silence404(prov);
-      const L = safeAddProvider(prov); if (L) L.rectangle = CA_RECT;
-      return L;
+      silence404(provider);
+      const layer = safeAddProvider(provider);
+      if (layer) layer.rectangle = CA_RECT;
+      return layer;
     }
-    // LST (Day, Terra) — daily visualization
-    function addLSTDay(dayStr){
-      const prov = new Cesium.UrlTemplateImageryProvider({
+
+    function addLSTDay(dayStr) {
+      const provider = new Cesium.UrlTemplateImageryProvider({
         url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_Land_Surface_Temp_Day/default/{Time}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png",
-        tilingScheme: new Cesium.WebMercatorTilingScheme(), maximumLevel: 7, credit: "NASA EOSDIS GIBS",
+        tilingScheme: new Cesium.WebMercatorTilingScheme(),
+        maximumLevel: 7,
+        credit: "NASA EOSDIS GIBS",
         customTags: { Time: () => dayStr }
       });
-      silence404(prov);
-      const L = safeAddProvider(prov); if (L) L.rectangle = CA_RECT;
-      return L;
+      silence404(provider);
+      const layer = safeAddProvider(provider);
+      if (layer) layer.rectangle = CA_RECT;
+      return layer;
     }
-    // Snow cover (NDSI, Terra) — daily
-    function addSnowCover(dayStr){
-      const prov = new Cesium.UrlTemplateImageryProvider({
+
+    function addSnowCover(dayStr) {
+      const provider = new Cesium.UrlTemplateImageryProvider({
         url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_NDSI_Snow_Cover/default/{Time}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png",
-        tilingScheme: new Cesium.WebMercatorTilingScheme(), maximumLevel: 8, credit: "NASA EOSDIS GIBS",
+        tilingScheme: new Cesium.WebMercatorTilingScheme(),
+        maximumLevel: 8,
+        credit: "NASA EOSDIS GIBS",
         customTags: { Time: () => dayStr }
       });
-      silence404(prov);
-      const L = safeAddProvider(prov); if (L) L.rectangle = CA_RECT;
-      return L;
+      silence404(provider);
+      const layer = safeAddProvider(provider);
+      if (layer) layer.rectangle = CA_RECT;
+      return layer;
     }
-    // Burned Area (monthly, MCD64A1). Layer ID can be one of a few; try in order.
-    function addBurnedMonthly(ymDayStr){ // expects YYYY-MM-01
+
+    function addBurnedMonthly(monthStr) {
       const candidates = [
-        "MODIS_Terra_Aqua_Burned_Area",          // common in GIBS
-        "MODIS_Terra_Burned_Area_Monthly",      // alt naming
-        "MCD64A1_Burned_Area"                   // fallback
+        "MODIS_Terra_Aqua_Burned_Area",
+        "MODIS_Terra_Burned_Area_Monthly",
+        "MCD64A1_Burned_Area"
       ];
-      for (const id of candidates){
-        try{
-          const prov = new Cesium.UrlTemplateImageryProvider({
+      for (const id of candidates) {
+        try {
+          const provider = new Cesium.UrlTemplateImageryProvider({
             url: `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/{Time}/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png`,
-            tilingScheme: new Cesium.WebMercatorTilingScheme(), maximumLevel: 6, credit: "NASA EOSDIS GIBS",
-            customTags: { Time: () => ymDayStr }
+            tilingScheme: new Cesium.WebMercatorTilingScheme(),
+            maximumLevel: 6,
+            credit: "NASA EOSDIS GIBS",
+            customTags: { Time: () => monthStr }
           });
-          silence404(prov);
-          const L = safeAddProvider(prov);
-          if (L) { L.rectangle = CA_RECT; L.__burnId = id; return L; }
-        } catch(e){ /* try next */ }
+          silence404(provider);
+          const layer = safeAddProvider(provider);
+          if (layer) {
+            layer.rectangle = CA_RECT;
+            layer.__burnId = id;
+            return layer;
+          }
+        } catch (error) {
+          /* try next candidate */
+        }
       }
-      console.warn('Burned Area WMTS layer not available on this endpoint for date:', ymDayStr);
+      console.warn("Burned Area WMTS layer not available for", monthStr);
       return null;
     }
-    // AOD (Terra)
-    function addAerosolDaily(dayStr){
-      const prov = new Cesium.UrlTemplateImageryProvider({
+
+    function addAerosolDaily(dayStr) {
+      const provider = new Cesium.UrlTemplateImageryProvider({
         url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_Aerosol/default/{Time}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png",
-        tilingScheme: new Cesium.WebMercatorTilingScheme(), maximumLevel: 7, credit: "NASA EOSDIS GIBS",
+        tilingScheme: new Cesium.WebMercatorTilingScheme(),
+        maximumLevel: 7,
+        credit: "NASA EOSDIS GIBS",
         customTags: { Time: () => dayStr }
       });
-      silence404(prov);
-      const L = safeAddProvider(prov); if (L) L.rectangle = CA_RECT;
-      return L;
-    }
-    // Fires (raster) — MODIS combined Day/Night/All
-    function addGibsFires(dayStr, variant='All'){
-      const layerId = `MODIS_Combined_Thermal_Anomalies_${variant}`;
-      const prov = new Cesium.UrlTemplateImageryProvider({
-        url: `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layerId}/default/{Time}/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png`,
-        tilingScheme: new Cesium.WebMercatorTilingScheme(), maximumLevel: 6, credit: "NASA EOSDIS GIBS",
-        customTags: { Time: () => dayStr }
-      });
-      silence404(prov);
-      const L = safeAddProvider(prov);
-      if (L){ L.rectangle = CA_RECT; L.brightness = 1.2; L.contrast = 1.25; L.gamma = 0.9; L.__variant = variant; }
-      return L;
+      silence404(provider);
+      const layer = safeAddProvider(provider);
+      if (layer) layer.rectangle = CA_RECT;
+      return layer;
     }
 
-    // ======== FIRMS VECTOR ICONS (local monthly) ========
+    // --- FIRMS detections ---------------------------------------------------
     let fireIconsEnabled = true;
-    let firmsDS = null, firmsAbort = null;
-    const FIRMS_MAX_ENTITIES = 250, FIRMS_MAX_MONTHS_CACHED = 6, ICON_SIZE = 48;
+    let firmsDataSource = null;
+    let firmsAbort = null;
+    const FIRMS_MAX_ENTITIES = 250;
+    const FIRMS_MAX_MONTHS_CACHED = 6;
     const FIRMS_MIN_ENABLE_HEIGHT_KM = 7000;
-    const firmsMonthLRU = new Map();
-    function monthKeyFromDay(dayStr){ return dayStr.slice(0,7); }
-    function localMonthUrl(monthKey){ return `./data/firms/CA-${monthKey}.geojson`; }
-    function lruGet(k){ if (!firmsMonthLRU.has(k)) return null; const v=firmsMonthLRU.get(k); firmsMonthLRU.delete(k); firmsMonthLRU.set(k,v); return v; }
-    function lruSet(k,v){ if (firmsMonthLRU.has(k)) firmsMonthLRU.delete(k); firmsMonthLRU.set(k,v); if (firmsMonthLRU.size>FIRMS_MAX_MONTHS_CACHED){ const fk=firmsMonthLRU.keys().next().value; firmsMonthLRU.delete(fk); } }
-    let fireIconCanvas = null;
-    function makeEmojiCanvas(emoji='🔥', size=ICON_SIZE){
-      const c=document.createElement('canvas'); c.width=c.height=size; const ctx=c.getContext('2d');
-      ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.font=`${Math.floor(size*.9)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
-      ctx.fillText(emoji, size/2, Math.ceil(size*.57));
-      const g=ctx.createRadialGradient(size/2,size/2,4,size/2,size/2,size/2);
-      g.addColorStop(0,'rgba(255,160,0,.15)'); g.addColorStop(1,'rgba(255,160,0,0)');
-      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(size/2,size/2,size/2,0,Math.PI*2); ctx.fill();
-      return c;
+    const ICON_SIZE = 48;
+
+    const firmsLRU = new Map();
+
+    function monthKeyFromDay(dayStr) {
+      return dayStr.slice(0, 7);
     }
-    function colorForConfidence(conf){ const s=String(conf).toLowerCase(); if (s.startsWith('h')||+conf>=80) return Cesium.Color.fromCssColorString('#ff3b30'); if (s.startsWith('n')||(+conf>=50&&+conf<80)) return Cesium.Color.fromCssColorString('#ff9500'); return Cesium.Color.fromCssColorString('#ffd60a'); }
-    function scaleForFrp(frp){ const v=Math.max(0,Math.min(1,(Number(frp)||0)/200)); return 0.6+v*0.8; }
-    const SAMPLE_FIRMS_GEOJSON = {"type":"FeatureCollection","features":[
-      {"type":"Feature","properties":{"acq_date":"2020-09-10","acq_time":"2015","confidence":"high","frp":120,"sat":"MODIS","id":"AUG1"},"geometry":{"type":"Point","coordinates":[-123.3,40.1]}},
-      {"type":"Feature","properties":{"acq_date":"2020-09-10","acq_time":"2010","confidence":"high","frp":95,"sat":"MODIS","id":"AUG2"},"geometry":{"type":"Point","coordinates":[-123.0,40.4]}},
-      {"type":"Feature","properties":{"acq_date":"2020-09-10","acq_time":"2005","confidence":"nominal","frp":60,"sat":"MODIS","id":"NORTH1"},"geometry":{"type":"Point","coordinates":[-121.2,39.8]}},
-      {"type":"Feature","properties":{"acq_date":"2020-09-10","acq_time":"2012","confidence":"nominal","frp":55,"sat":"MODIS","id":"NORTH2"},"geometry":{"type":"Point","coordinates":[-121.0,40.0]}},
-      {"type":"Feature","properties":{"acq_date":"2020-09-10","acq_time":"1959","confidence":"high","frp":180,"sat":"MODIS","id":"CREEK1"},"geometry":{"type":"Point","coordinates":[-119.3,37.2]}},
-      {"type":"Feature","properties":{"acq_date":"2020-09-10","acq_time":"1952","confidence":"low","frp":20,"sat":"MODIS","id":"CREEK2"},"geometry":{"type":"Point","coordinates":[-119.0,37.0]}}
-    ]};
-    function cameraHeightKm(){ const h = viewer.camera.positionCartographic.height||0; return h/1000; }
-    function getViewRectangle(){ try{ const rect = viewer.camera.computeViewRectangle(viewer.scene.globe.ellipsoid); return rect || CA_RECT; } catch{ return CA_RECT; } }
-    function gridDegForHeight(km){ if (km>5000) return 0.5; if (km>2000) return 0.25; if (km>800) return 0.1; if (km>300) return 0.05; return 0.02; }
-    function featureInRect(f,rect){ const [lon,lat]=f.geometry.coordinates;
-      return lon>=Cesium.Math.toDegrees(rect.west)&&lon<=Cesium.Math.toDegrees(rect.east)&&lat>=Cesium.Math.toDegrees(rect.south)&&lat<=Cesium.Math.toDegrees(rect.north);
+
+    function localMonthUrl(monthKey) {
+      return `./data/firms/CA-${monthKey}.geojson`;
     }
-    function decimateByGrid(features,rect,km){
-      const cell = gridDegForHeight(km); const cellMap = new Map();
-      const toDeg = Cesium.Math.toDegrees; const west=toDeg(rect.west), south=toDeg(rect.south);
-      for (const f of features){
-        if (!featureInRect(f,rect)) continue;
-        const [lon,lat]=f.geometry.coordinates; const ix=Math.floor((lon-west)/cell); const iy=Math.floor((lat-south)/cell);
-        const key = ix+','+iy; const frp = Number((f.properties&&(f.properties.frp??f.properties.FRP))||0);
-        const cur = cellMap.get(key); if (!cur || frp>(cur._frp||0)){ f._frp=frp; cellMap.set(key,f); }
+
+    function lruGet(key) {
+      if (!firmsLRU.has(key)) return null;
+      const value = firmsLRU.get(key);
+      firmsLRU.delete(key);
+      firmsLRU.set(key, value);
+      return value;
+    }
+
+    function lruSet(key, value) {
+      if (firmsLRU.has(key)) firmsLRU.delete(key);
+      firmsLRU.set(key, value);
+      if (firmsLRU.size > FIRMS_MAX_MONTHS_CACHED) {
+        const oldest = firmsLRU.keys().next().value;
+        firmsLRU.delete(oldest);
       }
-      const out = Array.from(cellMap.values());
-      if (out.length>FIRMS_MAX_ENTITIES){ out.sort((a,b)=>(b._frp||0)-(a._frp||0)); return out.slice(0,FIRMS_MAX_ENTITIES); }
-      return out;
     }
-    async function fetchLocalMonthGeoJSON(monthKey){
-      const cached = lruGet(monthKey); if (cached) return cached.geojson;
-      if (firmsAbort) firmsAbort.abort(); firmsAbort = new AbortController();
+
+    let fireIconCanvas = null;
+
+    function makeEmojiCanvas(emoji = "🔥", size = ICON_SIZE) {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = `${Math.floor(size * .9)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+      ctx.fillText(emoji, size / 2, Math.ceil(size * .57));
+      const glow = ctx.createRadialGradient(size / 2, size / 2, 4, size / 2, size / 2, size / 2);
+      glow.addColorStop(0, "rgba(255,160,0,.15)");
+      glow.addColorStop(1, "rgba(255,160,0,0)");
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+      ctx.fill();
+      return canvas;
+    }
+
+    function colorForConfidence(conf) {
+      const value = String(conf).toLowerCase();
+      if (value.startsWith("h") || +conf >= 80) return Cesium.Color.fromCssColorString("#ff3b30");
+      if (value.startsWith("n") || (+conf >= 50 && +conf < 80)) return Cesium.Color.fromCssColorString("#ff9500");
+      return Cesium.Color.fromCssColorString("#ffd60a");
+    }
+
+    function scaleForFrp(frp) {
+      const value = Math.max(0, Math.min(1, (Number(frp) || 0) / 200));
+      return 0.6 + value * 0.8;
+    }
+
+    const SAMPLE_FIRMS_GEOJSON = {
+      type: "FeatureCollection",
+      features: [
+        { type: "Feature", properties: { acq_date: "2020-09-10", acq_time: "2015", confidence: "high", frp: 120, sat: "MODIS", id: "AUG1" }, geometry: { type: "Point", coordinates: [-123.3, 40.1] } },
+        { type: "Feature", properties: { acq_date: "2020-09-10", acq_time: "2010", confidence: "high", frp: 95, sat: "MODIS", id: "AUG2" }, geometry: { type: "Point", coordinates: [-123.0, 40.4] } },
+        { type: "Feature", properties: { acq_date: "2020-09-10", acq_time: "2005", confidence: "nominal", frp: 60, sat: "MODIS", id: "NORTH1" }, geometry: { type: "Point", coordinates: [-121.2, 39.8] } },
+        { type: "Feature", properties: { acq_date: "2020-09-10", acq_time: "2012", confidence: "nominal", frp: 55, sat: "MODIS", id: "NORTH2" }, geometry: { type: "Point", coordinates: [-121.0, 40.0] } },
+        { type: "Feature", properties: { acq_date: "2020-09-10", acq_time: "1959", confidence: "high", frp: 180, sat: "MODIS", id: "CREEK1" }, geometry: { type: "Point", coordinates: [-119.3, 37.2] } },
+        { type: "Feature", properties: { acq_date: "2020-09-10", acq_time: "1952", confidence: "low", frp: 20, sat: "MODIS", id: "CREEK2" }, geometry: { type: "Point", coordinates: [-119.0, 37.0] } }
+      ]
+    };
+
+    function cameraHeightKm() {
+      return (viewer.camera.positionCartographic.height || 0) / 1000;
+    }
+
+    function getViewRectangle() {
+      try {
+        return viewer.camera.computeViewRectangle(viewer.scene.globe.ellipsoid) || CA_RECT;
+      } catch (error) {
+        return CA_RECT;
+      }
+    }
+
+    function gridDegForHeight(km) {
+      if (km > 5000) return 0.5;
+      if (km > 2000) return 0.25;
+      if (km > 800) return 0.1;
+      if (km > 300) return 0.05;
+      return 0.02;
+    }
+
+    function featureInRect(feature, rect) {
+      const [lon, lat] = feature.geometry.coordinates;
+      return (
+        lon >= Cesium.Math.toDegrees(rect.west) &&
+        lon <= Cesium.Math.toDegrees(rect.east) &&
+        lat >= Cesium.Math.toDegrees(rect.south) &&
+        lat <= Cesium.Math.toDegrees(rect.north)
+      );
+    }
+
+    function decimateByGrid(features, rect, km) {
+      const cell = gridDegForHeight(km);
+      const cellMap = new Map();
+      const toDeg = Cesium.Math.toDegrees;
+      const west = toDeg(rect.west);
+      const south = toDeg(rect.south);
+      for (const feature of features) {
+        if (!featureInRect(feature, rect)) continue;
+        const [lon, lat] = feature.geometry.coordinates;
+        const ix = Math.floor((lon - west) / cell);
+        const iy = Math.floor((lat - south) / cell);
+        const key = `${ix},${iy}`;
+        const frp = Number((feature.properties && (feature.properties.frp ?? feature.properties.FRP)) || 0);
+        const current = cellMap.get(key);
+        if (!current || frp > (current._frp || 0)) {
+          feature._frp = frp;
+          cellMap.set(key, feature);
+        }
+      }
+      const compact = Array.from(cellMap.values());
+      if (compact.length > FIRMS_MAX_ENTITIES) {
+        compact.sort((a, b) => (b._frp || 0) - (a._frp || 0));
+        return compact.slice(0, FIRMS_MAX_ENTITIES);
+      }
+      return compact;
+    }
+
+    async function fetchLocalMonthGeoJSON(monthKey) {
+      const cached = lruGet(monthKey);
+      if (cached) return cached.geojson;
+      if (firmsAbort) firmsAbort.abort();
+      firmsAbort = new AbortController();
       const url = localMonthUrl(monthKey);
-      try{ const res = await fetch(url, { signal: firmsAbort.signal, cache:'force-cache' });
-        if (!res.ok) throw new Error('missing month file'); const gj = await res.json(); lruSet(monthKey,{geojson:gj}); return gj;
-      } catch(e){ return SAMPLE_FIRMS_GEOJSON; }
+      try {
+        const response = await fetch(url, { signal: firmsAbort.signal, cache: "force-cache" });
+        if (!response.ok) throw new Error("missing month file");
+        const geojson = await response.json();
+        lruSet(monthKey, { geojson });
+        return geojson;
+      } catch (error) {
+        return SAMPLE_FIRMS_GEOJSON;
+      }
     }
-    async function ensureFireIcons(dayStr){
-      if (!fireIconsEnabled){ if (firmsDS){ viewer.dataSources.remove(firmsDS,true); firmsDS=null; } return; }
+
+    async function ensureFireIcons(dayStr) {
+      if (!fireIconsEnabled) {
+        if (firmsDataSource) {
+          viewer.dataSources.remove(firmsDataSource, true);
+          firmsDataSource = null;
+        }
+        document.getElementById("mIcons").textContent = "0";
+        return;
+      }
+
       const heightKm = cameraHeightKm();
-      if (heightKm > FIRMS_MIN_ENABLE_HEIGHT_KM){ if (firmsDS){ viewer.dataSources.remove(firmsDS,true); firmsDS=null; } return; }
-      if (!fireIconCanvas) fireIconCanvas = makeEmojiCanvas('🔥', ICON_SIZE);
-      const monthKey = monthKeyFromDay(dayStr); const monthGeo = await fetchLocalMonthGeoJSON(monthKey);
-      const rect = getViewRectangle(); const feats = (monthGeo&&monthGeo.features)?monthGeo.features:[];
-      const decimated = decimateByGrid(feats, rect, heightKm);
-      const frameGeo = { type:'FeatureCollection', features: decimated };
-      if (firmsDS){ viewer.dataSources.remove(firmsDS,true); firmsDS=null; }
-      firmsDS = await Cesium.GeoJsonDataSource.load(frameGeo, { clampToGround: false });
-      const ents = firmsDS.entities.values;
-      for (const e of ents){
-        const p = e.properties||{}; const conf = p.confidence&&p.confidence.getValue ? p.confidence.getValue() : (p.confidence||'nominal');
-        const frp = p.frp&&p.frp.getValue ? p.frp.getValue() : (p.frp||p.FRP||0);
-        const date = p.acq_date&&p.acq_date.getValue ? p.acq_date.getValue() : (p.acq_date||dayStr);
-        const time = p.acq_time&&p.acq_time.getValue ? p.acq_time.getValue() : (p.acq_time||'—');
-        e.point = undefined;
-        e.billboard = new Cesium.BillboardGraphics({
-          image: fireIconCanvas, scale: scaleForFrp(frp), color: colorForConfidence(conf),
-          verticalOrigin: Cesium.VerticalOrigin.BOTTOM, heightReference: Cesium.HeightReference.NONE,
+      if (heightKm > FIRMS_MIN_ENABLE_HEIGHT_KM) {
+        if (firmsDataSource) {
+          viewer.dataSources.remove(firmsDataSource, true);
+          firmsDataSource = null;
+        }
+        document.getElementById("mIcons").textContent = "0";
+        return;
+      }
+
+      if (!fireIconCanvas) fireIconCanvas = makeEmojiCanvas("🔥", ICON_SIZE);
+      const monthKey = monthKeyFromDay(dayStr);
+      const monthGeo = await fetchLocalMonthGeoJSON(monthKey);
+      const rect = getViewRectangle();
+      const features = monthGeo?.features ? monthGeo.features : [];
+      const decimated = decimateByGrid(features, rect, heightKm);
+      const frameGeo = { type: "FeatureCollection", features: decimated };
+
+      if (firmsDataSource) {
+        viewer.dataSources.remove(firmsDataSource, true);
+        firmsDataSource = null;
+      }
+
+      firmsDataSource = await Cesium.GeoJsonDataSource.load(frameGeo, { clampToGround: false });
+      const entities = firmsDataSource.entities.values;
+      for (const entity of entities) {
+        const properties = entity.properties || {};
+        const conf = properties.confidence && properties.confidence.getValue ? properties.confidence.getValue() : (properties.confidence || "nominal");
+        const frp = properties.frp && properties.frp.getValue ? properties.frp.getValue() : (properties.frp || properties.FRP || 0);
+        const date = properties.acq_date && properties.acq_date.getValue ? properties.acq_date.getValue() : (properties.acq_date || dayStr);
+        const time = properties.acq_time && properties.acq_time.getValue ? properties.acq_time.getValue() : (properties.acq_time || "—");
+
+        entity.point = undefined;
+        entity.billboard = new Cesium.BillboardGraphics({
+          image: fireIconCanvas,
+          scale: scaleForFrp(frp),
+          color: colorForConfidence(conf),
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          heightReference: Cesium.HeightReference.NONE,
           disableDepthTestDistance: Number.POSITIVE_INFINITY
         });
-        e.label = new Cesium.LabelGraphics({
-          text: `${conf} • FRP ${frp}`, font: '12px sans-serif', fillColor: Cesium.Color.WHITE,
-          showBackground: true, backgroundColor: Cesium.Color.fromAlpha(Cesium.Color.BLACK,.6),
+        entity.label = new Cesium.LabelGraphics({
+          text: `${conf} • FRP ${frp}`,
+          font: "12px sans-serif",
+          fillColor: Cesium.Color.WHITE,
+          showBackground: true,
+          backgroundColor: Cesium.Color.fromAlpha(Cesium.Color.BLACK, .6),
           pixelOffset: new Cesium.Cartesian2(0, -40)
         });
-        e.description = `<table style="font:13px system-ui; color:#111;">
-          <tr><td><b>Date</b></td><td>${date} ${time}Z</td></tr>
-          <tr><td><b>Confidence</b></td><td>${conf}</td></tr>
-          <tr><td><b>FRP</b></td><td>${frp} MW</td></tr></table>`;
+        entity.description = `
+          <table class="meta-table">
+            <tr><td><strong>Date</strong></td><td>${date} ${time}Z</td></tr>
+            <tr><td><strong>Confidence</strong></td><td>${conf}</td></tr>
+            <tr><td><strong>FRP</strong></td><td>${frp} MW</td></tr>
+          </table>`;
       }
-      firmsDS.clustering.enabled = true; firmsDS.clustering.pixelRange = 30; firmsDS.clustering.minimumClusterSize = 3;
-      firmsDS.clustering.clusterEvent.addEventListener((clustered, cluster) => {
-        cluster.label.show = true; cluster.label.font = '14px sans-serif'; cluster.label.fillColor = Cesium.Color.WHITE;
-        cluster.billboard.show = true; cluster.point.show = false;
-        const size = 44; const c=document.createElement('canvas'); c.width=c.height=size; const ctx=c.getContext('2d');
-        const grad=ctx.createLinearGradient(0,0,size,size); grad.addColorStop(0,'#ff6a00'); grad.addColorStop(1,'#ff2d55');
-        ctx.fillStyle=grad; ctx.beginPath(); ctx.arc(size/2,size/2,size/2,0,Math.PI*2); ctx.fill();
-        ctx.strokeStyle='rgba(255,255,255,.9)'; ctx.lineWidth=3; ctx.stroke();
-        cluster.billboard.image=c; cluster.billboard.width=size; cluster.billboard.height=size; cluster.label.pixelOffset=new Cesium.Cartesian2(0,0);
+
+      firmsDataSource.clustering.enabled = true;
+      firmsDataSource.clustering.pixelRange = 30;
+      firmsDataSource.clustering.minimumClusterSize = 3;
+      firmsDataSource.clustering.clusterEvent.addEventListener((clustered, cluster) => {
+        cluster.label.show = true;
+        cluster.label.font = "14px sans-serif";
+        cluster.label.fillColor = Cesium.Color.WHITE;
+        cluster.billboard.show = true;
+        cluster.point.show = false;
+        const size = 44;
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        const gradient = ctx.createLinearGradient(0, 0, size, size);
+        gradient.addColorStop(0, "#ff6a00");
+        gradient.addColorStop(1, "#ff2d55");
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,.9)";
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        cluster.billboard.image = canvas;
+        cluster.billboard.width = size;
+        cluster.billboard.height = size;
+        cluster.label.pixelOffset = new Cesium.Cartesian2(0, 0);
       });
-      viewer.dataSources.add(firmsDS);
-      // update metrics
-      document.getElementById('mIcons').textContent = String(ents.length);
+
+      viewer.dataSources.add(firmsDataSource);
+      document.getElementById("mIcons").textContent = String(entities.length);
     }
 
-    // ======== Layer switching & rebuild ========
-    let lastDay=null, lastDay16=null, lastMonth01=null;
-    let hillLayer=null, viirsLayer=null, ndviLayer=null, lstLayer=null, snowLayer=null, burnLayer=null, firesLayer=null, aodLayer=null;
-    let showHill=true, showNDVI=true, showLST=false, showSnow=false, showBurn=false, showFires=true, showAOD=false;
-    let firesVariant='All';
-    let rebuildBusy=false, lastSwitchAt=0; const MIN_SWITCH_MS=800;
+    // --- Layer rebuild ------------------------------------------------------
+    let lastDay = null;
+    let lastDay16 = null;
+    let lastMonth01 = null;
 
-    async function rebuildFor(currentJD){
-      if (rebuildBusy) return; rebuildBusy=true;
-      const dayStr = ymd(currentJD), dayStr16=snapTo16DayISO(currentJD), month01=ym01(currentJD);
+    let hillLayer = null;
+    let viirsLayer = null;
+    let ndviLayer = null;
+    let lstLayer = null;
+    let snowLayer = null;
+    let burnLayer = null;
+    let aodLayer = null;
 
-      // Context hillshade first (beneath all)
-      if (showHill){
-        if (!hillLayer){ hillLayer = addAsterHillshade(); if (hillLayer) hillLayer.alpha = .85; }
-      } else if (hillLayer){ layers.remove(hillLayer,true); hillLayer=null; }
+    let showHill = true;
+    let showNDVI = true;
+    let showLST = false;
+    let showSnow = false;
+    let showBurn = false;
+    let showAOD = false;
 
-      // Base VIIRS daily
-      if (!viirsLayer || lastDay!==dayStr){
-        viirsLayer = await preloadAndCrossfade(viirsLayer, ()=>{ const L=addViirsTrueColor(dayStr); if (L) L.alpha=0; return L; }, 1.0, 350);
+    let rebuildBusy = false;
+    let lastSwitchAt = 0;
+    const MIN_SWITCH_MS = 800;
+
+    async function rebuildFor(currentJD) {
+      if (rebuildBusy) return;
+      rebuildBusy = true;
+
+      const dayStr = formatDay(currentJD);
+      const dayStr16 = snapTo16DayISO(currentJD);
+      const month01 = formatMonth01(currentJD);
+
+      if (showHill) {
+        if (!hillLayer) {
+          hillLayer = addAsterHillshade();
+          if (hillLayer) hillLayer.alpha = .85;
+        }
+      } else if (hillLayer) {
+        layers.remove(hillLayer, true);
+        hillLayer = null;
       }
 
-      // NDVI
-      if (showNDVI){
-        if (!ndviLayer || lastDay16!==dayStr16){
-          ndviLayer = await preloadAndCrossfade(ndviLayer, ()=>{ const L=addNdvi16Day(dayStr16); if (L) L.alpha=0; return L; }, .6, 350);
-        }
-      } else if (ndviLayer){ layers.remove(ndviLayer,true); ndviLayer=null; }
+      if (!viirsLayer || lastDay !== dayStr) {
+        viirsLayer = await preloadAndCrossfade(viirsLayer, () => {
+          const layer = addViirsTrueColor(dayStr);
+          if (layer) layer.alpha = 0;
+          return layer;
+        }, 1, 350);
+      }
 
-      // LST
-      if (showLST){
-        if (!lstLayer || lastDay!==dayStr){
-          lstLayer = await preloadAndCrossfade(lstLayer, ()=>{ const L=addLSTDay(dayStr); if (L) L.alpha=0; return L; }, .55, 350);
+      if (showNDVI) {
+        if (!ndviLayer || lastDay16 !== dayStr16) {
+          ndviLayer = await preloadAndCrossfade(ndviLayer, () => {
+            const layer = addNdvi16Day(dayStr16);
+            if (layer) layer.alpha = 0;
+            return layer;
+          }, .6, 350);
         }
-      } else if (lstLayer){ layers.remove(lstLayer,true); lstLayer=null; }
+      } else if (ndviLayer) {
+        layers.remove(ndviLayer, true);
+        ndviLayer = null;
+      }
 
-      // Snow
-      if (showSnow){
-        if (!snowLayer || lastDay!==dayStr){
-          snowLayer = await preloadAndCrossfade(snowLayer, ()=>{ const L=addSnowCover(dayStr); if (L) L.alpha=0; return L; }, .85, 350);
+      if (showLST) {
+        if (!lstLayer || lastDay !== dayStr) {
+          lstLayer = await preloadAndCrossfade(lstLayer, () => {
+            const layer = addLSTDay(dayStr);
+            if (layer) layer.alpha = 0;
+            return layer;
+          }, .55, 350);
         }
-      } else if (snowLayer){ layers.remove(snowLayer,true); snowLayer=null; }
+      } else if (lstLayer) {
+        layers.remove(lstLayer, true);
+        lstLayer = null;
+      }
 
-      // Burned Area (monthly)
-      if (showBurn){
-        if (!burnLayer || lastMonth01!==month01){
-          burnLayer = await preloadAndCrossfade(burnLayer, ()=>{ const L=addBurnedMonthly(month01); if (L) L.alpha=0; return L; }, .85, 350);
+      if (showSnow) {
+        if (!snowLayer || lastDay !== dayStr) {
+          snowLayer = await preloadAndCrossfade(snowLayer, () => {
+            const layer = addSnowCover(dayStr);
+            if (layer) layer.alpha = 0;
+            return layer;
+          }, .85, 350);
         }
-      } else if (burnLayer){ layers.remove(burnLayer,true); burnLayer=null; }
+      } else if (snowLayer) {
+        layers.remove(snowLayer, true);
+        snowLayer = null;
+      }
 
-      // Fires raster
-      if (showFires){
-        if (!firesLayer || lastDay!==dayStr || firesLayer.__variant!==firesVariant){
-          firesLayer = await preloadAndCrossfade(firesLayer, ()=>{ const L=addGibsFires(dayStr, firesVariant); if (L) L.alpha=0; return L; }, 1.0, 350);
+      if (showBurn) {
+        if (!burnLayer || lastMonth01 !== month01) {
+          burnLayer = await preloadAndCrossfade(burnLayer, () => {
+            const layer = addBurnedMonthly(month01);
+            if (layer) layer.alpha = 0;
+            return layer;
+          }, .85, 350);
         }
-      } else if (firesLayer){ layers.remove(firesLayer,true); firesLayer=null; }
+      } else if (burnLayer) {
+        layers.remove(burnLayer, true);
+        burnLayer = null;
+      }
 
-      // Fire ICONS
       await ensureFireIcons(dayStr);
 
-      // AOD
-      if (showAOD){
-        if (!aodLayer || lastDay!==dayStr){
-          aodLayer = await preloadAndCrossfade(aodLayer, ()=>{ const L=addAerosolDaily(dayStr); if (L) L.alpha=0; return L; }, .6, 350);
+      if (showAOD) {
+        if (!aodLayer || lastDay !== dayStr) {
+          aodLayer = await preloadAndCrossfade(aodLayer, () => {
+            const layer = addAerosolDaily(dayStr);
+            if (layer) layer.alpha = 0;
+            return layer;
+          }, .6, 350);
         }
-      } else if (aodLayer){ layers.remove(aodLayer,true); aodLayer=null; }
+      } else if (aodLayer) {
+        layers.remove(aodLayer, true);
+        aodLayer = null;
+      }
 
-      lastDay = dayStr; lastDay16=dayStr16; lastMonth01=month01; lastSwitchAt=performance.now(); rebuildBusy=false;
+      lastDay = dayStr;
+      lastDay16 = dayStr16;
+      lastMonth01 = month01;
+      lastSwitchAt = performance.now();
+      rebuildBusy = false;
 
-      // metrics
-      document.getElementById('mDate').textContent = dayStr;
+      document.getElementById("mDate").textContent = dayStr;
     }
 
     rebuildFor(viewer.clock.currentTime);
-    viewer.clock.onTick.addEventListener(()=>{
-      const dayNow = ymd(viewer.clock.currentTime);
-      const since = performance.now()-lastSwitchAt;
-      if (dayNow!==lastDay && since>=MIN_SWITCH_MS && !rebuildBusy) rebuildFor(viewer.clock.currentTime);
+    viewer.clock.onTick.addEventListener(() => {
+      const currentDay = formatDay(viewer.clock.currentTime);
+      const elapsed = performance.now() - lastSwitchAt;
+      if (currentDay !== lastDay && elapsed >= MIN_SWITCH_MS && !rebuildBusy) {
+        rebuildFor(viewer.clock.currentTime);
+      }
     });
-    let viewMoveTimer=null;
-    viewer.camera.changed.addEventListener(()=>{
+
+    let viewMoveTimer = null;
+    viewer.camera.changed.addEventListener(() => {
       if (!fireIconsEnabled) return;
       if (viewMoveTimer) clearTimeout(viewMoveTimer);
-      viewMoveTimer = setTimeout(()=>{ ensureFireIcons(lastDay||ymd(viewer.clock.currentTime)); }, 220);
+      viewMoveTimer = setTimeout(() => {
+        ensureFireIcons(lastDay || formatDay(viewer.clock.currentTime));
+      }, 220);
     });
 
-    // ======== Chapters (bookmarks + captions) ========
+    // --- Chapters -----------------------------------------------------------
+    const area = (west, south, east, north) => Cesium.Rectangle.fromDegrees(west, south, east, north);
+
     const chapters = [
       {
-        id:'fuel-stress', title:'Fuel Stress (drought years)',
-        rect: Cesium.Rectangle.fromDegrees(-124.7, 35.0, -118.0, 41.8), // N. Valley + Sierra
-        date: '2015-08-16', cadence: '16d',
-        layers: { hill:true, ndvi:true, lst:true, snow:true, burn:false, aod:false, fires:true, firesIcons:true, firesVariant:'All' },
-        what: 'NDVI & LST during multi-year drought — browning rangelands & stressed Sierra forests; diminished spring snow.',
-        why:  'Stressed fuels + earlier, hotter summers prime larger fires and reduce water for cities & farms.'
+        id: "fuel-stress-snow-loss",
+        title: "Fuel Stress & Snow Loss",
+        rect: area(-123.9, 35.0, -118.4, 41.8),
+        date: "2015-03-20",
+        cadence: "16d",
+        layers: { hill: true, ndvi: true, lst: true, snow: true, burn: false, aod: false, fireIcons: false },
+        windows: [
+          "2012–2016 drought core fuel stress",
+          "2015-03 to 2015-04 record-low snowpack",
+          "2017-02 to 2017-04 wet rebound comparison"
+        ],
+        what: "NDVI anomalies, land surface temperature, and snow cover reveal drought-driven browning across the Sierra and Central Valley.",
+        why: "Prolonged heat and scant snow weakened photosynthetic carbon production, dried fine fuels, and reduced runoff heading into peak fire seasons."
       },
       {
-        id:'ignition-spread', title:'Ignition & Spread (Aug/North/Creek 2020)',
-        rect: Cesium.Rectangle.fromDegrees(-125, 35, -116, 43),
-        date: '2020-09-10', cadence: 'day',
-        layers: { hill:true, ndvi:false, lst:false, snow:false, burn:true, aod:false, fires:true, firesIcons:true, firesVariant:'All' },
-        what: 'Monthly burn scar (MCD64A1) + MODIS hotspots. Terrain shows windward/leeward effects & slope-driven spread.',
-        why:  'Large burned area aligned with terrain funnels; repeated burns shape habitat and watershed risk.'
+        id: "ignition-spread",
+        title: "Ignition & Spread (Terrain-steered megafires)",
+        rect: area(-125.3, 35.2, -116.2, 43.2),
+        date: "2020-08-20",
+        cadence: "day",
+        layers: { hill: true, ndvi: false, lst: false, snow: false, burn: true, aod: false, fireIcons: true },
+        windows: [
+          "Spotlights: 2013 Rim, 2014 King, 2015 Valley and Butte",
+          "Spotlights: 2017 Thomas; 2018 Mendocino, Carr, and Camp",
+          "Spotlights: 2019 Kincade; 2020 LNU, SCU, CZU, August Complex; 2021 Dixie and Caldor"
+        ],
+        what: "Burned area footprints and FIRMS fire detections track terrain-steered spread from Rim through Dixie and Caldor.",
+        why: "Slope, wind, and drought-stressed fuels funnel megafire growth and push perimeters toward communities and watersheds."
       },
       {
-        id:'smoke-week', title:'Smoke Week (Bay Area & Valley)',
-        rect: Cesium.Rectangle.fromDegrees(-124.7, 36.9, -120.6, 39.1), // Bay + Delta
-        date: '2020-09-10', cadence: 'day',
-        layers: { hill:false, ndvi:false, lst:false, snow:false, burn:false, aod:true, fires:true, firesIcons:true, firesVariant:'All' },
-        what: 'Daily AOD plumes march across the Central Valley & Bay; hotspots show source fires.',
-        why:  'Degraded air quality → school closures, respiratory risk, outdoor work curtailment, transit disruptions.'
+        id: "smoke-transport",
+        title: "Smoke, Transport & Exposure",
+        rect: area(-126.0, 35.5, -117.0, 42.5),
+        date: "2020-09-10",
+        cadence: "day",
+        layers: { hill: false, ndvi: false, lst: false, snow: false, burn: false, aod: true, fireIcons: true },
+        windows: [
+          "2018 Jul–Aug Northern California smoke",
+          "2019 Oct 27–31 Kincade smoke",
+          "2020 Aug 19–23 and Sep 9–13 Bay and Valley smoke wall",
+          "2021 Jul–Aug Dixie and Caldor smoke pooling"
+        ],
+        what: "Aerosol optical depth and hotspots trace smoke plumes sweeping the Bay Area, Central Valley, and crest-crossing flows.",
+        why: "Transport episodes drive hazardous air, visibility loss, and public health disruptions far from the ignition zones."
       },
       {
-        id:'recovery', title:'Recovery (6–24 months)',
-        rect: Cesium.Rectangle.fromDegrees(-121.2, 36.7, -118.6, 38.1), // Creek Fire scar focus
-        date: '2021-08-01', cadence: '16d',
-        layers: { hill:true, ndvi:true, lst:false, snow:false, burn:true, aod:false, fires:false, firesIcons:false, firesVariant:'All' },
-        what: 'NDVI rebounding over the burn scar vs. monthly burn perimeter; slower on south-facing slopes.',
-        why:  'Slow recovery → erosion & debris-flow hazard persists into first winter storms.'
+        id: "recovery",
+        title: "Recovery (6–24 months)",
+        rect: area(-123.5, 36.5, -118.0, 40.4),
+        date: "2021-06-01",
+        cadence: "16d",
+        layers: { hill: true, ndvi: true, lst: false, snow: false, burn: true, aod: false, fireIcons: false },
+        windows: [
+          "2014–2016 King scar",
+          "2018–2019 Thomas and Carr scars",
+          "2020–2021 CZU, LNU, and Creek scars"
+        ],
+        what: "NDVI anomaly time-series overlay post-fire scars to compare north-facing rebounds with exposed ridges.",
+        why: "Recovery pace flags erosion and debris-flow risk while guiding restoration investments."
+      },
+      {
+        id: "sunlight-energy",
+        title: "Sunlight & Energy (optional wow)",
+        rect: area(-123.5, 36.6, -120.0, 38.9),
+        date: "2020-09-10",
+        cadence: "day",
+        layers: { hill: false, ndvi: false, lst: false, snow: false, burn: false, aod: true, fireIcons: true },
+        windows: [
+          "2020-09-09 to 2020-09-12 solar dimming week"
+        ],
+        what: "Dense smoke over the Bay and Valley dims solar input during the 2020 orange-sky week.",
+        why: "Shortwave anomalies and smoke-driven darkness underscore impacts on energy production and daily life."
       }
     ];
+
     let currentChapterIdx = 0;
-    const chapterSel = document.getElementById('chapterSel');
-    chapters.forEach((c,i)=>{ const opt=document.createElement('option'); opt.value=String(i); opt.textContent=c.title; chapterSel.appendChild(opt); });
+    const chapterSelect = document.getElementById("chapterSel");
+    chapters.forEach((chapter, index) => {
+      const option = document.createElement("option");
+      option.value = String(index);
+      option.textContent = chapter.title;
+      chapterSelect.appendChild(option);
+    });
 
-    function updateCaption(c){
-      const cap = document.getElementById('caption');
-      document.getElementById('capTitle').textContent = c.what;
-      document.getElementById('capWhy').textContent = c.why;
-      document.getElementById('mChapter').textContent = c.title;
-      cap.classList.remove('show'); void cap.offsetWidth; cap.classList.add('show');
+    const timelineSections = [
+      {
+        title: "2011 · Baseline green and white",
+        events: [
+          {
+            label: "2011-02 to 2011-04, Sierra and Central Valley",
+            what: "Healthy late-season snowpack and strong NDVI in the lowlands establish the visual baseline.",
+            why: "Sets contrast for drought-era browning and early snow retreat referenced in 2015 and 2020.",
+            source: "Earth Observatory"
+          }
+        ]
+      },
+      {
+        title: "2012–2016 · Multi-year drought and fuel stress",
+        events: [
+          {
+            label: "2012-05 to 2014-09, Foothills and rangelands",
+            what: "Progressive NDVI decline in grass and chaparral belts with hotter land surface temperatures over bare soils.",
+            why: "Prolonged heat and dryness cured fine fuels, stressed forests, and suppressed photosynthetic carbon uptake.",
+            source: "Water Resources California"
+          },
+          {
+            label: "2015-03 to 2015-04, Sierra Nevada snowline",
+            what: "Record-low snowpack exposes granite and bare ground weeks early across the range.",
+            why: "Earlier melt cuts soil moisture and runoff, extending hot-season stress ahead of severe fire behavior.",
+            source: "Terra"
+          }
+        ]
+      },
+      {
+        title: "2013 · Terrain-channeled spread",
+        events: [
+          {
+            label: "2013-08-18 to 2013-09-05, Rim Fire (Yosemite and Tuolumne)",
+            what: "FIRMS hotspots climb canyons toward Yosemite while monthly burned area shows rapid expansion.",
+            why: "Steep topography and dry mixed-conifer fuels enabled one of the decade's signature Sierra fires.",
+            source: "Earth Observatory"
+          }
+        ]
+      },
+      {
+        title: "2014 · Steep slopes and rapid runs",
+        events: [
+          {
+            label: "2014-09-14 to 2014-09-25, King Fire (Eldorado National Forest)",
+            what: "Hotspots funnel up the American River canyons and scars concentrate on windward slopes.",
+            why: "Highlights slope and wind alignment plus high-severity patches that recover slowly.",
+            source: "Earth Observatory"
+          }
+        ]
+      },
+      {
+        title: "2015 · Drought culmination and WUI impact",
+        events: [
+          {
+            label: "2015-09-09 to 2015-10-01, Butte Fire (Amador and Calaveras)",
+            what: "Hotspots surge from a powerline ignition while the monthly scar advances toward wildland-urban corridors.",
+            why: "Shows drought-era vulnerability of foothill communities amid utility ignitions.",
+            source: "CAL FIRE"
+          },
+          {
+            label: "2015-09-12 to 2015-10-15, Valley Fire (Lake County)",
+            what: "Explosive expansion over 24–48 hours with AOD plumes drifting over the North Bay.",
+            why: "Fast-moving wildland-urban disaster during peak drought stress with major structure losses.",
+            source: "CAL FIRE"
+          }
+        ]
+      },
+      {
+        title: "2017 · Wet rebound and coastal mega",
+        events: [
+          {
+            label: "2017-02 to 2017-04, Sierra",
+            what: "Wet-year snowpack rebound and greener hills compared with 2015.",
+            why: "Loads the landscape with grasses and brush—a fuel pulse that set up 2018 severity.",
+            source: "NASA Science"
+          },
+          {
+            label: "2017-12-04 to 2017-12-20, Thomas Fire (Ventura and Santa Barbara)",
+            what: "Downslope winds drive hotspots west and east while smoke floods coastal basins.",
+            why: "At the time California's largest modern fire, highlighting coastal smoke exposure far from forests.",
+            source: "Earth Observatory"
+          }
+        ]
+      },
+      {
+        title: "2018 · Record acreage and destructive WUI",
+        events: [
+          {
+            label: "2018-07-27 to 2018-08-10, Mendocino Complex and Carr",
+            what: "Twin plumes and expanding scars stretch across North Coast ranges and near Redding.",
+            why: "Largest on record at the time with extreme pyrocumulus and drought-cured dead fuels still contributing.",
+            source: "Earth Observatory"
+          },
+          {
+            label: "2018-11-08 to 2018-11-25, Camp Fire (Paradise and Butte County)",
+            what: "Rapid ignition and spread from Feather River canyons with AOD and CO spikes over the Sacramento Valley.",
+            why: "Deadliest and most destructive California wildfire, showing community-scale exposure and evacuation impacts.",
+            source: "Wikipedia"
+          }
+        ]
+      },
+      {
+        title: "2019 · Wind-driven WUI and smoke pulses",
+        events: [
+          {
+            label: "2019-10-26 to 2019-10-31, Kincade Fire (Sonoma)",
+            what: "Wind-aligned hotspots sweep into northeastern Sonoma as smoke pushes toward the coast and Bay.",
+            why: "Illustrates public safety power shutoff era and late-season wind events driving smoke over dense population centers.",
+            source: "Earth Observatory"
+          }
+        ]
+      },
+      {
+        title: "2020 · Lightning sieges to historic smoke",
+        events: [
+          {
+            label: "2020-08-17 to 2020-08-27, LNU and SCU Lightning Complexes (Wine Country and Diablo Range)",
+            what: "Hundreds of lightning ignitions with massive scars blooming within days.",
+            why: "Simultaneous large fires near major metros anchor the land-to-fire step in the story.",
+            source: "Earth Observatory"
+          },
+          {
+            label: "2020-08-16 to 2020-09-30, CZU Lightning Complex (Santa Cruz Mountains)",
+            what: "Coastal redwood and chaparral burn with monthly scars showing ridge-to-coast spread.",
+            why: "Rare coastal forest impact adjacent to Bay Area population centers.",
+            source: "Earth Observatory"
+          },
+          {
+            label: "2020-08-17 to 2020-10-06, August Complex (Mendocino and Trinity)",
+            what: "Persistent hotspots over weeks with burned area surpassing one million acres.",
+            why: "California's first modern gigafire demonstrates unconstrained spread across remote terrain.",
+            source: "NASA"
+          },
+          {
+            label: "2020-08-19 to 2020-08-23, Bay and Valley smoke arrival",
+            what: "MODIS aerosol plumes flood the Bay, Delta, and San Joaquin with elevated CO over the trough.",
+            why: "First regional smoke episode prompts school closures, outdoor work stoppages, and air-quality alerts.",
+            source: "Earth Observatory"
+          },
+          {
+            label: "2020-09-09 to 2020-09-13, Bay Area and Central Valley orange sky",
+            what: "Dense lofted smoke over the marine layer dims midday light and degrades air quality.",
+            why: "Iconic exposure moment to pair with MISR plume heights for judges and audiences.",
+            source: "Earth Observatory"
+          }
+        ]
+      },
+      {
+        title: "2021 · Crest-crossing fire runs and prolonged smoke",
+        events: [
+          {
+            label: "2021-07-14 to 2021-08-15, Dixie Fire (Northern Sierra and Southern Cascades)",
+            what: "Hotspots march along canyons as the scar grows into the state's second-largest fire and plumes spill east.",
+            why: "Shows long-duration spread with smoke transport into the Great Basin.",
+            source: "Earth Observatory"
+          },
+          {
+            label: "2021-08-14 to 2021-09-01, Caldor Fire (El Dorado to Tahoe Basin)",
+            what: "Fire crosses Highway 50 and pushes toward South Lake Tahoe with sustained smoke in Tahoe and Reno basins.",
+            why: "Rare crest-crossing spread into a major alpine tourist hub with clear people impacts.",
+            source: "Wikipedia"
+          },
+          {
+            label: "2021-07-25 to 2021-08-20, Regional smoke pooling",
+            what: "Aerosol plumes linger in the Sacramento–San Joaquin trough and Lake Tahoe basin under weak winds.",
+            why: "Basin geometry traps smoke overnight, creating multi-day air-quality and transit disruptions.",
+            source: "Earth Observatory"
+          }
+        ]
+      },
+      {
+        title: "Recovery snapshots",
+        events: [
+          {
+            label: "2019-05, Thomas and Carr scars",
+            what: "NDVI rebound along riparian corridors and north-facing slopes with slow regrowth on exposed ridges.",
+            why: "Aspect and moisture control half-time recovery for outreach on landscape triage.",
+            source: "Earth Observatory"
+          },
+          {
+            label: "2021-03, CZU, LNU, and Creek 2020 scars",
+            what: "Patchy early recovery in moister microsites while brown patches persist on south-facing slopes.",
+            why: "Supports messaging on erosion and debris-flow risk heading into the first wet season.",
+            source: "Earth Observatory"
+          },
+          {
+            label: "2021-06, CZU, LNU, and Creek 2020 scars",
+            what: "Early-summer greening highlights where canopy and groundcover are returning versus staying bare.",
+            why: "Helps teams plan reforestation, hazard mitigation, and monitoring revisits.",
+            source: "Earth Observatory"
+          }
+        ]
+      },
+      {
+        title: "Sunlight and energy",
+        events: [
+          {
+            label: "2020-09-09 to 2020-09-12, Bay and Central Valley",
+            what: "Aerosol optical depth peaks coincide with lower surface shortwave flux through the orange-sky week.",
+            why: "Regional solar generation dipped 10–30 percent during the peaks, tying smoke to economic impacts.",
+            source: "U.S. Energy Information Administration"
+          }
+        ]
+      }
+    ];
+
+    const timelineContent = document.getElementById("timelineContent");
+    if (timelineContent) {
+      timelineContent.innerHTML = "";
+      timelineSections.forEach(section => {
+        const group = document.createElement("div");
+        group.className = "timeline-group";
+        const heading = document.createElement("h4");
+        heading.textContent = section.title;
+        group.appendChild(heading);
+        section.events.forEach(event => {
+          const entry = document.createElement("div");
+          entry.className = "timeline-entry";
+          const label = document.createElement("strong");
+          label.textContent = event.label;
+          entry.appendChild(label);
+          const what = document.createElement("span");
+          what.textContent = `What: ${event.what}`;
+          entry.appendChild(what);
+          const why = document.createElement("span");
+          why.textContent = `Why: ${event.why}`;
+          entry.appendChild(why);
+          if (event.source) {
+            const source = document.createElement("em");
+            source.textContent = event.source;
+            entry.appendChild(source);
+          }
+          group.appendChild(entry);
+        });
+        timelineContent.appendChild(group);
+      });
     }
-    async function applyChapter(c){
-      // Camera
-      await viewer.camera.flyTo({ destination: c.rect, duration: 1.1 });
-      // Date snapping per cadence
-      let targetJD;
-      if (c.cadence==='16d'){ targetJD = Cesium.JulianDate.fromDate(new Date(c.date)); }
-      else { targetJD = Cesium.JulianDate.fromDate(new Date(c.date)); }
+
+    const callouts = [
+      "Delta and Carquinez gaps: Wind gaps accelerate plume transport into the Valley—watch nighttime pooling.",
+      "South Bay basin: Morning aerosol optical depth stays elevated as smoke settles under inversions.",
+      "Sierra crest: Lofted plumes overtop into Nevada during synoptic wind shifts."
+    ];
+
+    const calloutList = document.getElementById("calloutList");
+    if (calloutList) {
+      calloutList.innerHTML = "";
+      callouts.forEach(text => {
+        const item = document.createElement("li");
+        item.textContent = text;
+        calloutList.appendChild(item);
+      });
+    }
+
+    function updateCaption(chapter) {
+      const caption = document.getElementById("caption");
+      document.getElementById("capTitle").textContent = chapter.what;
+      const whenText = Array.isArray(chapter.windows) && chapter.windows.length ? chapter.windows.join(" • ") : (chapter.dateRange || chapter.date || "");
+      const capWhen = document.getElementById("capWhen");
+      capWhen.textContent = whenText;
+      capWhen.style.display = whenText ? "block" : "none";
+      document.getElementById("capWhy").textContent = chapter.why;
+      document.getElementById("mChapter").textContent = chapter.title;
+      caption.classList.remove("show");
+      void caption.offsetWidth;
+      caption.classList.add("show");
+    }
+
+    async function applyChapter(chapter) {
+      await viewer.camera.flyTo({ destination: chapter.rect, duration: 1.1 });
+      const targetJD = Cesium.JulianDate.fromDate(new Date(chapter.date));
       viewer.clock.currentTime = targetJD;
-      // Layer toggles
-      showHill=c.layers.hill; showNDVI=c.layers.ndvi; showLST=c.layers.lst; showSnow=c.layers.snow;
-      showBurn=c.layers.burn; showAOD=c.layers.aod; showFires=c.layers.fires; fireIconsEnabled=c.layers.firesIcons;
-      firesVariant=c.layers.firesVariant || 'All';
-      // Checkbox sync
-      chkHill.checked=showHill; chkNDVI.checked=showNDVI; chkLST.checked=showLST; chkSnow.checked=showSnow;
-      chkBurn.checked=showBurn; chkAOD.checked=showAOD; chkFires.checked=showFires; chkFiresIcons.checked=fireIconsEnabled;
-      firesSel.value=firesVariant;
-      await rebuildFor(targetJD);
-      updateCaption(c);
-    }
-    async function goChapter(idx){ currentChapterIdx=(idx+chapters.length)%chapters.length; chapterSel.value=String(currentChapterIdx); await applyChapter(chapters[currentChapterIdx]); }
+      const defaults = { hill: true, ndvi: true, lst: false, snow: false, burn: false, aod: false, fireIcons: true };
+      const prefs = Object.assign(defaults, chapter.layers || {});
+      showHill = prefs.hill;
+      showNDVI = prefs.ndvi;
+      showLST = prefs.lst;
+      showSnow = prefs.snow;
+      showBurn = prefs.burn;
+      showAOD = prefs.aod;
+      fireIconsEnabled = prefs.fireIcons;
 
-    // ======== UI wiring ========
-    const chkHill  = document.getElementById('chkHill');
-    const chkNDVI  = document.getElementById('chkNDVI');
-    const chkLST   = document.getElementById('chkLST');
-    const chkSnow  = document.getElementById('chkSnow');
-    const chkBurn  = document.getElementById('chkBurn');
-    const chkAOD   = document.getElementById('chkAOD');
-    const chkFires = document.getElementById('chkFires');
-    const chkFiresIcons = document.getElementById('chkFiresIcons');
-    const firesSel = document.getElementById('firesVariant');
-    const speedSel = document.getElementById('speed');
-    const btnPlay  = document.getElementById('btnPlay');
-    const loading  = document.getElementById('loading');
-    const convNote = document.getElementById('conv');
+      chkHill.checked = showHill;
+      chkNDVI.checked = showNDVI;
+      chkLST.checked = showLST;
+      chkSnow.checked = showSnow;
+      chkBurn.checked = showBurn;
+      chkAOD.checked = showAOD;
+      chkFiresIcons.checked = fireIconsEnabled;
+
+      await rebuildFor(targetJD);
+      updateCaption(chapter);
+    }
+
+    async function goChapter(index) {
+      currentChapterIdx = (index + chapters.length) % chapters.length;
+      chapterSelect.value = String(currentChapterIdx);
+      await applyChapter(chapters[currentChapterIdx]);
+    }
+
+    // --- UI wiring ----------------------------------------------------------
+    const chkHill = document.getElementById("chkHill");
+    const chkNDVI = document.getElementById("chkNDVI");
+    const chkLST = document.getElementById("chkLST");
+    const chkSnow = document.getElementById("chkSnow");
+    const chkBurn = document.getElementById("chkBurn");
+    const chkAOD = document.getElementById("chkAOD");
+    const chkFiresIcons = document.getElementById("chkFiresIcons");
+    const speedSel = document.getElementById("speed");
+    const btnPlay = document.getElementById("btnPlay");
+    const loading = document.getElementById("loading");
 
     chkHill.onchange = () => { showHill = chkHill.checked; rebuildFor(viewer.clock.currentTime); };
     chkNDVI.onchange = () => { showNDVI = chkNDVI.checked; rebuildFor(viewer.clock.currentTime); };
-    chkLST.onchange  = () => { showLST  = chkLST.checked;  rebuildFor(viewer.clock.currentTime); };
+    chkLST.onchange = () => { showLST = chkLST.checked; rebuildFor(viewer.clock.currentTime); };
     chkSnow.onchange = () => { showSnow = chkSnow.checked; rebuildFor(viewer.clock.currentTime); };
     chkBurn.onchange = () => { showBurn = chkBurn.checked; rebuildFor(viewer.clock.currentTime); };
-    chkAOD.onchange  = () => { showAOD  = chkAOD.checked;  rebuildFor(viewer.clock.currentTime); };
-    chkFires.onchange = () => { showFires = chkFires.checked; rebuildFor(viewer.clock.currentTime); };
-    chkFiresIcons.onchange = async () => { fireIconsEnabled = chkFiresIcons.checked; await ensureFireIcons(lastDay||ymd(viewer.clock.currentTime)); };
-    firesSel.onchange = (e)=>{ firesVariant = e.target.value; rebuildFor(viewer.clock.currentTime); };
+    chkAOD.onchange = () => { showAOD = chkAOD.checked; rebuildFor(viewer.clock.currentTime); };
+    chkFiresIcons.onchange = async () => {
+      fireIconsEnabled = chkFiresIcons.checked;
+      await ensureFireIcons(lastDay || formatDay(viewer.clock.currentTime));
+    };
 
-    document.getElementById('btnPrev').onclick = ()=> goChapter(currentChapterIdx-1);
-    document.getElementById('btnNext').onclick = ()=> goChapter(currentChapterIdx+1);
-    chapterSel.onchange = (e)=> goChapter(Number(e.target.value));
+    document.getElementById("btnPrev").onclick = () => goChapter(currentChapterIdx - 1);
+    document.getElementById("btnNext").onclick = () => goChapter(currentChapterIdx + 1);
+    chapterSelect.onchange = event => goChapter(Number(event.target.value));
 
-    // Known busy-fire day/area: CA 2020-09-10
-    function addPin(lon,lat,text){
-      viewer.entities.add({ position: Cesium.Cartesian3.fromDegrees(lon,lat),
-        point:{ pixelSize:8, color: Cesium.Color.RED },
-        label:{ text, font:'13px sans-serif', pixelOffset: new Cesium.Cartesian2(0,-16) } });
+    function addPin(lon, lat, text) {
+      viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(lon, lat),
+        point: { pixelSize: 8, color: Cesium.Color.RED },
+        label: { text, font: "13px sans-serif", pixelOffset: new Cesium.Cartesian2(0, -16) }
+      });
     }
-    document.getElementById('btnTestFires').onclick = async ()=>{
-      const testJD = Cesium.JulianDate.fromDate(new Date(Date.UTC(2020,8,10)));
-      viewer.clock.currentTime = testJD; viewer.clock.shouldAnimate = false;
+
+    document.getElementById("btnTestFires").onclick = async () => {
+      const testJD = Cesium.JulianDate.fromDate(new Date(Date.UTC(2020, 8, 10)));
+      viewer.clock.currentTime = testJD;
+      viewer.clock.shouldAnimate = false;
       await viewer.camera.flyTo({ destination: Cesium.Rectangle.fromDegrees(-125, 35, -116, 43), duration: 1.2 });
-      addPin(-123.3, 40.1, 'August Complex');
-      addPin(-121.2, 39.8, 'North Complex');
-      addPin(-119.3, 37.2, 'Creek Fire');
+      addPin(-123.3, 40.1, "August Complex");
+      addPin(-121.2, 39.8, "North Complex");
+      addPin(-119.3, 37.2, "Creek Fire");
       await rebuildFor(testJD);
     };
 
-    btnPlay.onclick = ()=>{ viewer.clock.shouldAnimate = !viewer.clock.shouldAnimate; btnPlay.textContent = viewer.clock.shouldAnimate ? "⏸︎" : "⏯︎"; };
-    speedSel.onchange = ()=>{ viewer.clock.multiplier = Number(speedSel.value); };
-    viewer.scene.globe.tileLoadProgressEvent.addEventListener(num => { loading.textContent = num ? `loading tiles: ${num}` : ''; });
+    btnPlay.onclick = () => {
+      viewer.clock.shouldAnimate = !viewer.clock.shouldAnimate;
+      btnPlay.textContent = viewer.clock.shouldAnimate ? "⏸︎" : "⏯︎";
+    };
 
-    // Legend label entity (quick descriptor)
-    viewer.entities.add({
-      position: Cesium.Cartesian3.fromDegrees(-124.2, 42.7),
-      label: { text:"ASTER Hillshade + VIIRS True Color + MODIS: NDVI • LST • Snow • Burned Area • AOD + FIRMS Icons",
-               font:"14px sans-serif", fillColor: Cesium.Color.WHITE, showBackground:true }
+    speedSel.onchange = () => {
+      viewer.clock.multiplier = Number(speedSel.value);
+    };
+
+    viewer.scene.globe.tileLoadProgressEvent.addEventListener(num => {
+      loading.textContent = num ? `loading tiles: ${num}` : "";
     });
 
-    // ======== Recording + MP4 conversion (kept) ========
-    let mediaRecorder=null, recordedChunks=[], lastRecordingBlob=null, lastRecordingType='', recTimer=null, recStartMs=0;
-    const recBadge = document.getElementById('recBadge'), recMode = document.getElementById('recMode'), recTime = document.getElementById('recTime');
-    function setRecUI(active, modeText='REC'){
-      if (active){ recMode.textContent = modeText; recStartMs = performance.now(); recBadge.classList.remove('hidden');
-        clearInterval(recTimer); recTimer = setInterval(()=>{ const s=Math.floor((performance.now()-recStartMs)/1000);
-          const mm=String(Math.floor(s/60)).padStart(2,'0'), ss=String(s%60).padStart(2,'0'); recTime.textContent=`${mm}:${ss}`; }, 250);
-      } else { recBadge.classList.add('hidden'); clearInterval(recTimer); }
-    }
-    function pickRecorderMime(){
-      if (MediaRecorder?.isTypeSupported?.('video/mp4;codecs=h264')) return 'video/mp4;codecs=h264';
-      if (MediaRecorder?.isTypeSupported?.('video/webm;codecs=vp9')) return 'video/webm;codecs=vp9';
-      return 'video/webm;codecs=vp8';
-    }
-    function startRecording(fps=24, modeLabel='LIVE'){
-      const canvas = viewer.scene.canvas; const capture = canvas.captureStream||canvas.mozCaptureStream;
-      if (!capture){ alert('Canvas captureStream not supported. Try Chrome/Edge/Firefox.'); return; }
-      const stream = capture.call(canvas, fps);
-      recordedChunks=[]; const mimeType = pickRecorderMime(); mediaRecorder = new MediaRecorder(stream, { mimeType });
-      mediaRecorder.ondataavailable = e=>{ if (e.data.size) recordedChunks.push(e.data); };
-      mediaRecorder.onstop = ()=>{
-        lastRecordingBlob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'video/webm' });
-        lastRecordingType = lastRecordingBlob.type||''; const directMp4 = /mp4/i.test(lastRecordingType);
-        const url = URL.createObjectURL(lastRecordingBlob); const a=document.createElement('a');
-        a.href=url; a.download=`cesium-${directMp4?'recording':'webm'}-${new Date().toISOString().replace(/[:.]/g,'-')}.${directMp4?'mp4':'webm'}`; a.click(); URL.revokeObjectURL(url);
-        document.getElementById('convertMp4').disabled = directMp4; convNote.textContent = directMp4 ? 'Recorded directly to MP4.' : 'Ready to convert WebM → MP4.'; setRecUI(false);
-      };
-      mediaRecorder.start(100); setRecUI(true, modeLabel);
-      document.getElementById('recStart').disabled = true; document.getElementById('recStop').disabled = false; document.getElementById('convertMp4').disabled = true; convNote.textContent='';
-    }
-    function stopRecording(){ if (mediaRecorder && mediaRecorder.state!=='inactive') mediaRecorder.stop();
-      document.getElementById('recStart').disabled=false; document.getElementById('recStop').disabled=true; }
-    let scriptedStop=false;
-    async function recordTimelineScripted24({ stepDays=1, holdSeconds=.5, fps=24 }={}){
-      scriptedStop=false; const prev=viewer.clock.shouldAnimate; viewer.clock.shouldAnimate=false; startRecording(fps,'SCRIPT');
-      let t=viewer.clock.currentTime.clone(); const end=viewer.clock.stopTime;
-      while(!scriptedStop && Cesium.JulianDate.lessThanOrEquals(t,end)){ await rebuildFor(t); viewer.clock.currentTime=t; await new Promise(r=>setTimeout(r,holdSeconds*1000));
-        t = Cesium.JulianDate.addDays(t, stepDays, new Cesium.JulianDate()); }
-      stopRecording(); viewer.clock.shouldAnimate=prev;
-    }
-    const { createFFmpeg, fetchFile } = FFmpeg; const ffmpeg = createFFmpeg({ log:true }); let ffmpegLoaded=false;
-    async function convertLastRecordingToMp4(){
-      if (!lastRecordingBlob){ convNote.textContent='No recording to convert.'; return; }
-      if (/mp4/i.test(lastRecordingType)){ convNote.textContent='Already MP4.'; return; }
-      convNote.textContent='Loading FFmpeg…'; if (!ffmpegLoaded){ await ffmpeg.load(); ffmpegLoaded=true; }
-      convNote.textContent='Preparing input…'; await ffmpeg.FS('writeFile','input.webm', await fetchFile(lastRecordingBlob));
-      convNote.textContent='Converting (H.264, 24 fps)…'; ffmpeg.setProgress(({ratio})=>{ const pct=Math.max(0,Math.min(100,Math.round((ratio||0)*100))); convNote.textContent=`Converting: ${pct}%`; });
-      await ffmpeg.run('-i','input.webm','-r','24','-c:v','libx264','-pix_fmt','yuv420p','-profile:v','high','-level','4.1','-movflags','faststart','output.mp4');
-      const data = ffmpeg.FS('readFile','output.mp4'); const mp4Blob = new Blob([data.buffer], { type:'video/mp4' });
-      const url = URL.createObjectURL(mp4Blob); const a=document.createElement('a'); a.href=url; a.download=`cesium-converted-${new Date().toISOString().replace(/[:.]/g,'-')}.mp4`; a.click(); URL.revokeObjectURL(url);
-      convNote.textContent='MP4 ready ✅'; document.getElementById('convertMp4').disabled=true;
-    }
-    document.getElementById('recStart').onclick = ()=> startRecording(24,'LIVE');
-    document.getElementById('recStop').onclick = ()=> { scriptedStop=true; stopRecording(); };
-    document.getElementById('recScripted').onclick = ()=> recordTimelineScripted24({ stepDays:1, holdSeconds:.5, fps:24 });
-    document.getElementById('convertMp4').onclick = convertLastRecordingToMp4;
+    viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(-124.2, 42.7),
+      label: {
+        text: "ASTER Hillshade + VIIRS True Color + MODIS: NDVI • LST • Snow • Burned Area • AOD + FIRMS fire detections",
+        font: "14px sans-serif",
+        fillColor: Cesium.Color.WHITE,
+        showBackground: true
+      }
+    });
 
-    // ======== Start ========
-    viewer.clock.shouldAnimate = true; document.getElementById('btnPlay').textContent = "⏸︎";
-    // populate metrics notes
-    document.getElementById('mNotes').textContent = 'Icons use local monthly FIRMS GeoJSON • AOD/LST/Snow/Burn use GIBS WMTS';
-    // kick off first chapter to show caption
+    viewer.clock.shouldAnimate = true;
+    btnPlay.textContent = "⏸︎";
+    document.getElementById("mNotes").textContent = "Fire detections use local monthly FIRMS GeoJSON • Other layers stream from NASA GIBS";
+
     goChapter(0);
   </script>
 </body>
 </html>
-
